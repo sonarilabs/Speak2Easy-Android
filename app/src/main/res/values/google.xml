@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Paste your OAuth 2.0 *Web client ID* here (from the SAME Google Cloud project as iOS).
+      Leave blank to disable the Google sign-in button; email/password works regardless.
+      Example: 719475858527-xxxxxxxx.apps.googleusercontent.com
+    -->
+    <string name="google_web_client_id" translatable="false"></string>
+</resources>

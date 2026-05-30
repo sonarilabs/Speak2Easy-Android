@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ system splash. windowSplashScreenBackground replaces the default white,
+  and windowSplashScreenIconBackgroundColor masks the navy padding around the launcher
+  icon so the system-splash <-> in-app-splash transition is seamless.
+-->
+<resources>
+    <style name="Theme.Speak2Easy" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+    </style>
+</resources>

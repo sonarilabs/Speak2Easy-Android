@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Dark window background so API 30 (which doesn't honor the splash-screen attrs in
+      values-v31) shows a navy flash that matches the in-app SplashScreen rather than
+      stock white.
+    -->
+    <style name="Theme.Speak2Easy" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+    </style>
+</resources>

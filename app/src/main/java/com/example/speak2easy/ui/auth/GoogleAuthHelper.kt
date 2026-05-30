@@ -1,0 +1,52 @@
+package com.example.speak2easy.ui.auth
+
+import android.content.Context
+import android.util.Base64
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import com.example.speak2easy.data.remote.SonariJson
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+data class GoogleCredential(
+    val providerUserId: String,
+    val email: String?,
+    val displayName: String?,
+)
+
+object GoogleAuthHelper {
+    /**
+     * Launches the Credential Manager Google chooser and returns the account's stable
+     * `sub` id (matching iOS `provider_user_id`), email, and name. Throws on cancel/error.
+     */
+    suspend fun signIn(context: Context, webClientId: String): GoogleCredential {
+        val option = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(webClientId)
+            .setAutoSelectEnabled(false)
+            .build()
+        val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
+        val response = CredentialManager.create(context).getCredential(context, request)
+        val credential = GoogleIdTokenCredential.createFrom(response.credential.data)
+        // `credential.id` is the account email; the stable user id (sub) lives in the JWT.
+        val sub = subFromIdToken(credential.idToken) ?: credential.id
+        return GoogleCredential(
+            providerUserId = sub,
+            email = credential.id,
+            displayName = credential.displayName,
+        )
+    }
+
+    private fun subFromIdToken(idToken: String): String? {
+        val parts = idToken.split(".")
+        if (parts.size < 2) return null
+        return try {
+            val payload = String(Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP))
+            SonariJson.parseToJsonElement(payload).jsonObject["sub"]?.jsonPrimitive?.content
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
