@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +73,14 @@ fun WritingPracticeScreen(
     val romanization = remember(character) { KanaStrokeCounts.romanizationFor(character) }
     var showExitConfirm by remember { mutableStateOf(false) }
     var canvasSizePx by remember { mutableStateOf(IntArray(2) { 1 }) }
+    val scrollState = rememberScrollState()
+
+    // Auto-scroll to result when it appears.
+    LaunchedEffect(state.result) {
+        if (state.result != null) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -79,7 +88,7 @@ fun WritingPracticeScreen(
             .background(c.background)
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(horizontal = 20.dp, vertical = 12.dp)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scrollState),
     ) {
         // Header: EXIT chevron + target character.
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

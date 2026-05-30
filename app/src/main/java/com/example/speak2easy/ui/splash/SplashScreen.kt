@@ -33,7 +33,7 @@ fun SplashScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(c.background)
-            .padding(40.dp),
+            .padding(horizontal = 20.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -41,13 +41,12 @@ fun SplashScreen() {
             painter = painterResource(R.drawable.speak2easy_logo),
             contentDescription = "Speak2Easy",
             contentScale = ContentScale.Fit,
-            // Fill the available column width so the wordmark reads as the dominant element,
-            // not subordinate to the mascot below.
+            // Full width to make the wordmark as large as possible.
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(16.dp))
-        // Shrunk so the wordmark logo reads as the dominant brand element.
-        MascotImage(mascot = Mascot.Studying, height = 140.dp)
+        Spacer(Modifier.height(48.dp))
+        // Shrunk further to ensure the wordmark logo is the dominant element.
+        MascotImage(mascot = Mascot.Studying, height = 90.dp)
         Text(
             "More lessons & languages coming soon",
             style = SonariFonts.monoSmall.copy(letterSpacing = 1.2.sp),

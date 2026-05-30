@@ -261,11 +261,6 @@ private fun IncorrectDrillContent(attempt: PracticeAttemptDetail) {
             Text(it, style = SonariFonts.monoSmall, color = c.textPrimary, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(16.dp))
         }
-        attempt.matchScore?.let {
-            Text("MATCH SCORE", style = SonariFonts.monoCaption, color = c.textSecondary)
-            Text("${(it * 100).toInt()}%", style = SonariFonts.monoLarge, color = c.accent, modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.height(16.dp))
-        }
         Spacer(Modifier.height(8.dp))
     }
 }

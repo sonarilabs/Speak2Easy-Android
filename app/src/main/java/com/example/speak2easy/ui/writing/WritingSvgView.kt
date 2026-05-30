@@ -44,7 +44,7 @@ private const val SVG_STROKE_WIDTH = 128f
 fun WritingSvgView(svg: String, mode: WritingMode, modifier: Modifier = Modifier) {
     val parsed = remember(svg) { parseAnimCjkSvg(svg) }
     val totalSeconds = parsed.totalDurationSeconds
-    val progressSeconds = remember(svg, mode) { Animatable(if (mode == WritingMode.GUIDE) 0f else totalSeconds) }
+    val progressSeconds = remember(svg, mode) { Animatable(0f) }
 
     LaunchedEffect(svg, mode, totalSeconds) {
         if (mode == WritingMode.GUIDE && totalSeconds > 0f) {
@@ -57,7 +57,8 @@ fun WritingSvgView(svg: String, mode: WritingMode, modifier: Modifier = Modifier
                 ),
             )
         } else {
-            progressSeconds.snapTo(totalSeconds)
+            // In TRACE or FREE_DRAW, we don't need the animation progress for strokes.
+            progressSeconds.snapTo(0f)
         }
     }
 
@@ -82,42 +83,49 @@ private fun DrawScope.drawParsedSvg(
     val scale = min(size.width / viewBox.width(), size.height / viewBox.height())
     val tx = (size.width - viewBox.width() * scale) / 2f - viewBox.left * scale
     val ty = (size.height - viewBox.height() * scale) / 2f - viewBox.top * scale
-    val alpha = if (mode == WritingMode.TRACE) 0.22f else 1f
 
     withTransform({
         translate(tx, ty)
         scale(scale, scale, pivot = Offset.Zero)
     }) {
-        svg.fillPaths.forEach { path ->
-            drawPath(path = path, color = Color(0xFFCCCCCC).copy(alpha = alpha))
+        // Draw the static guide character shape.
+        // TRACE: Constant faint guide.
+        // GUIDE: Starts as guide, then stays visible but lighter as strokes animate.
+        val guideAlpha = when (mode) {
+            WritingMode.TRACE -> 0.40f
+            WritingMode.GUIDE -> 0.40f
+            else -> 0f
         }
 
-        svg.strokes.forEach { stroke ->
-            val fraction = when (mode) {
-                WritingMode.TRACE -> 1f
-                WritingMode.GUIDE -> ((progressSeconds - stroke.delaySeconds) / stroke.durationSeconds).coerceIn(0f, 1f)
-                WritingMode.FREE_DRAW -> 0f
-            }
-            if (fraction <= 0f) return@forEach
+        if (guideAlpha > 0f) {
+            drawPath(path = svg.combinedPath, color = Color(0xFFCCCCCC).copy(alpha = guideAlpha))
+        }
 
-            val pathToDraw = if (fraction >= 1f) {
-                stroke.path.path
-            } else {
-                stroke.path.androidPath.segment(fraction).asComposePath()
-            }
+        // Draw animated strokes (only in GUIDE mode).
+        if (mode == WritingMode.GUIDE) {
+            svg.strokes.forEach { stroke ->
+                val fraction = ((progressSeconds - stroke.delaySeconds) / stroke.durationSeconds).coerceIn(0f, 1f)
+                if (fraction <= 0f) return@forEach
 
-            val drawStroke = {
-                drawPath(
-                    path = pathToDraw,
-                    color = Color.Black.copy(alpha = alpha),
-                    style = Stroke(width = SVG_STROKE_WIDTH, cap = StrokeCap.Round),
-                )
-            }
+                val pathToDraw = if (fraction >= 1f) {
+                    stroke.path.path
+                } else {
+                    stroke.path.androidPath.segment(fraction).asComposePath()
+                }
 
-            if (stroke.clipPath != null) {
-                clipPath(stroke.clipPath) { drawStroke() }
-            } else {
-                drawStroke()
+                val drawStroke = {
+                    drawPath(
+                        path = pathToDraw,
+                        color = Color.Black,
+                        style = Stroke(width = SVG_STROKE_WIDTH, cap = StrokeCap.Round),
+                    )
+                }
+
+                if (stroke.clipPath != null) {
+                    clipPath(stroke.clipPath) { drawStroke() }
+                } else {
+                    drawStroke()
+                }
             }
         }
     }
@@ -245,6 +253,13 @@ private data class ParsedAnimCjkSvg(
     val strokes: List<ParsedSvgStroke>,
 ) {
     val totalDurationSeconds: Float = strokes.maxOfOrNull { it.delaySeconds + it.durationSeconds } ?: 0f
+
+    /** A single path combining all fills to avoid intersection alpha artifacts. */
+    val combinedPath: Path by lazy {
+        Path().apply {
+            fillPaths.forEach { addPath(it) }
+        }
+    }
 }
 
 private data class ParsedSvgPath(
