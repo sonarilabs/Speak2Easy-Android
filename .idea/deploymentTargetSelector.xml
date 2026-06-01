@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="Speak2Easy">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-05-26T08:21:34.473796Z">
+        <DropdownSelection timestamp="2026-05-31T18:20:46.250627Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="LocalEmulator" identifier="path=/Users/kratos/.android/avd/Pixel_9_Pro.avd" />
+              <DeviceId pluginId="PhysicalDevice" identifier="serial=R5CX20Z8VZA" />
             </handle>
           </Target>
         </DropdownSelection>

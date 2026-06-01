@@ -10,11 +10,15 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+      allowBackup=false: Android's auto-backup would otherwise upload the app's
+      SharedPreferences (which include the JWT + refresh token in `sonari_auth`)
+      to the user's Google Drive and restore them on any device sign-in. Easier
+      and safer to opt out wholesale than to maintain an exclude rules list.
+    -->
     <application
         android:name=".Speak2EasyApp"
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      Paste your OAuth 2.0 *Web client ID* here (from the SAME Google Cloud project as iOS).
-      Leave blank to disable the Google sign-in button; email/password works regardless.
-      Example: 719475858527-xxxxxxxx.apps.googleusercontent.com
+      OAuth 2.0 *Web client ID* from GCP project "speak2easy" (same project as iOS).
+      Used as `serverClientId` in Credential Manager so the issued ID token's audience matches
+      what the backend verifies against (backend env: GOOGLE_OAUTH_CLIENT_IDS, comma-separated).
+      The matching client secret stays out of the APK — backend uses Google's JWKS, not the secret.
     -->
-    <string name="google_web_client_id" translatable="false"></string>
+    <string name="google_web_client_id" translatable="false">719475858527-crrmmttnjmrc3ap3b4aaogsd21su2bhi.apps.googleusercontent.com</string>
 </resources>
