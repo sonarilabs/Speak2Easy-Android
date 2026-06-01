@@ -12,6 +12,7 @@ import com.sonari.speak2easy.data.remote.dto.ResetPasswordRequest
 import com.sonari.speak2easy.data.remote.dto.OnboardingRequest
 import com.sonari.speak2easy.data.remote.dto.SignInRequest
 import com.sonari.speak2easy.domain.model.User
+import com.sonari.speak2easy.util.TextSanitizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -110,8 +111,9 @@ class AuthRepository(
     }
 
     suspend fun signInWithGoogle(idToken: String, email: String?, displayName: String?): AuthResult = try {
+        val cleanName = displayName?.let { TextSanitizer.cleanName(it).trim() }?.ifEmpty { null }
         val resp = apiCall(json) {
-            authApi.signIn(SignInRequest(provider = "google", email = email, displayName = displayName, idToken = idToken))
+            authApi.signIn(SignInRequest(provider = "google", email = email, displayName = cleanName, idToken = idToken))
         }
         val user = resp.user.copy(authProvider = "google")
         tokenStore.saveSession(resp.accessToken ?: resp.token, user, resp.refreshToken)
@@ -140,12 +142,13 @@ class AuthRepository(
 
     suspend fun signUpWithEmail(email: String, password: String, displayName: String?): AuthResult = try {
         val clean = email.trim().lowercase()
+        val cleanName = displayName?.let { TextSanitizer.cleanName(it).trim() }?.ifEmpty { null }
         val resp = apiCall(json) {
             authApi.signIn(
                 SignInRequest(
                     provider = "email",
                     email = clean,
-                    displayName = displayName?.trim()?.ifEmpty { null },
+                    displayName = cleanName,
                     password = password,
                     isSignup = true,
                 ),

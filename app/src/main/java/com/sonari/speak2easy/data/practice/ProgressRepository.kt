@@ -35,13 +35,14 @@ class ProgressRepository(
         }
     }
 
-    suspend fun getSessions(limit: Int = 20, forceRefresh: Boolean = false): List<PracticeSessionSummary> {
+    suspend fun getSessions(userId: String, limit: Int = 20, forceRefresh: Boolean = false): List<PracticeSessionSummary> {
         val now = System.currentTimeMillis()
-        cachedSessions?.takeIf { !forceRefresh && it.userId == "$limit" && now - it.fetchedAt < TTL_MS }
+        val cacheKey = "$userId:$limit"
+        cachedSessions?.takeIf { !forceRefresh && it.userId == cacheKey && now - it.fetchedAt < TTL_MS }
             ?.let { return it.value }
         return lock.withLock {
             val fresh = apiCall(json) { practiceApi.getSessions(limit = limit) }
-            cachedSessions = Cached("$limit", fresh, now)
+            cachedSessions = Cached(cacheKey, fresh, now)
             fresh
         }
     }
@@ -55,11 +56,14 @@ class ProgressRepository(
         }
     }
 
-    /** Called from the practice flow when a session finishes so the Progress tab refreshes. */
-    suspend fun invalidateOnSessionComplete() = lock.withLock {
+    /** Called when practice activity changes user-visible progress. */
+    suspend fun invalidateUserProgress() = lock.withLock {
         cachedProgress = null
         cachedSessions = null
     }
+
+    /** Called from the practice flow when a session finishes so the Progress tab refreshes. */
+    suspend fun invalidateOnSessionComplete() = invalidateUserProgress()
 
     suspend fun invalidateAll() = lock.withLock {
         cachedProgress = null

@@ -64,43 +64,52 @@ fun PersonalInfoScreen(viewModel: OnboardingViewModel, onNext: () -> Unit) {
                 selected = selectedState,
                 optionLabel = { it.name },
                 placeholder = "Select state",
-            ) { s -> viewModel.update { it.copy(state = s.code) } }
-
-            // City: dropdown of popular metros, "Other (type below)" reveals a free-text field.
-            // Picking a known city back-fills the State dropdown if it was empty (one-way assist —
-            // doesn't override a manual state pick).
-            val matchedCity = UsCities.firstOrNull { it.name == form.city }
-            var isOtherSelected by remember(form.countryCode) {
-                mutableStateOf(!form.city.isNullOrEmpty() && matchedCity == null)
-            }
-            LabeledDropdown(
-                label = "City",
-                options = UsCities,
-                selected = when {
-                    isOtherSelected -> UsCityOther
-                    matchedCity != null -> matchedCity
-                    else -> null
-                },
-                optionLabel = { it.name },
-                placeholder = "Select city",
-            ) { picked ->
-                if (picked === UsCityOther) {
-                    isOtherSelected = true
-                    viewModel.update { it.copy(city = "") }
-                } else {
-                    isOtherSelected = false
-                    viewModel.update {
-                        it.copy(
-                            city = picked.name,
-                            state = if (it.state.isNullOrEmpty()) picked.stateCode else it.state,
-                        )
-                    }
+            ) { s ->
+                // Clear the city when state changes — the previous selection almost certainly
+                // doesn't exist in the new state's list. Keep the state code, drop city/Other.
+                viewModel.update {
+                    if (it.state == s.code) it
+                    else it.copy(state = s.code, city = null)
                 }
             }
-            if (isOtherSelected) {
-                SonariTextField(form.city ?: "", { v ->
-                    viewModel.update { it.copy(city = TextSanitizer.cleanFreeText(v, 100)) }
-                }, "City name")
+
+            // City dropdown only after the user picks a state, so the filtered list has
+            // meaningful entries instead of just OTHER. Each state's top metros come from
+            // the iOS USCity table — full list in OnboardingModels.UsCities.
+            val state = form.state
+            if (!state.isNullOrEmpty()) {
+                val cityOptions = remember(state) { citiesFor(state) }
+                val matchedCity = cityOptions.firstOrNull { it.name == form.city && it !== UsCityOther }
+                var isOtherSelected by remember(state) {
+                    mutableStateOf(!form.city.isNullOrEmpty() && matchedCity == null)
+                }
+                LabeledDropdown(
+                    label = "City",
+                    options = cityOptions,
+                    selected = when {
+                        isOtherSelected -> UsCityOther
+                        matchedCity != null -> matchedCity
+                        else -> null
+                    },
+                    optionLabel = { it.name },
+                    placeholder = "Select city",
+                ) { picked ->
+                    if (picked === UsCityOther) {
+                        isOtherSelected = true
+                        viewModel.update { it.copy(city = "") }
+                    } else {
+                        isOtherSelected = false
+                        viewModel.update { it.copy(city = picked.name) }
+                    }
+                }
+                if (isOtherSelected) {
+                    // Letters / space / hyphen / apostrophe / period only — digits and stray
+                    // symbols are stripped on every keystroke (cleanCity). The CONTINUE button
+                    // gate (isPersonalInfoComplete → isValidCity) also enforces ≥3 chars.
+                    SonariTextField(form.city ?: "", { v ->
+                        viewModel.update { it.copy(city = TextSanitizer.cleanCity(v)) }
+                    }, "City name (letters only, min 3)")
+                }
             }
         }
     }

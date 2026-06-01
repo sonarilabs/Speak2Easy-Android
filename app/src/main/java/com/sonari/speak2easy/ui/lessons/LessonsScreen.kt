@@ -211,9 +211,17 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
                     SectionHeader(section.title, section.subtitle)
                 }
                 items(section.groups, key = { it.groupLabel }) { group ->
-                    WordGroupCard(group, accent, enabled = state.wordsAccessible) {
-                        onSelect(PracticeSource.WordGroup(group))
-                    }
+                    // iOS semantics: a word group is locked only when the API explicitly
+                    // returns isUnlocked = false for it. Missing key = treat as unlocked.
+                    // Category-level gate (`wordsAccessible`) still overrides — if the user
+                    // hasn't unlocked the Words category at all, every group is disabled.
+                    val groupUnlocked = state.wordGroupUnlocked[group.groupLabel] != false
+                    WordGroupCard(
+                        group = group,
+                        accent = accent,
+                        enabled = state.wordsAccessible && groupUnlocked,
+                        progress = state.wordGroupProgress[group.groupLabel] ?: 0f,
+                    ) { onSelect(PracticeSource.WordGroup(group)) }
                 }
             }
         } else {

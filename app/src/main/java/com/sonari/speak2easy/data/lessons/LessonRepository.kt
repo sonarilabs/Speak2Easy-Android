@@ -45,6 +45,17 @@ class LessonRepository(
         contentItemsByKey.clear()
     }
 
+    /**
+     * Drops only the per-charset lesson progress/unlock cache so the next [getLessons] call
+     * round-trips to the API. Called from [com.sonari.speak2easy.data.practice.PracticeRepository]
+     * right after a session completes — otherwise the cached lessonsByCharset entry returns the
+     * pre-session unlock state and the next lesson appears locked even after the backend just
+     * unlocked it. Chart/content/group caches stay (those are immutable for the user).
+     */
+    suspend fun invalidateLessonProgress() = lock.withLock {
+        lessonsByCharset.clear()
+    }
+
     /** Progress-tracking endpoint — bypasses the lessons cache because the unlocked map changes per session. */
     suspend fun getLessons(charset: String, forceRefresh: Boolean = false): LessonsResponse =
         cached(lessonsByCharset, charset, forceRefresh) { apiCall(json) { contentApi.getLessons(charset = charset) } }

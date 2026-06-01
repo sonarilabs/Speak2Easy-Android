@@ -39,7 +39,7 @@ class ProgressViewModel(
         viewModelScope.launch {
             state = state.copy(isLoading = true)
             val progress = runCatching { repo.getProgress(userId) }.getOrNull()
-            val sessions = runCatching { repo.getSessions(20) }.getOrNull().orEmpty()
+            val sessions = runCatching { repo.getSessions(userId, limit = 20) }.getOrNull().orEmpty()
             state = ProgressUiState(
                 isLoading = false,
                 progress = progress,

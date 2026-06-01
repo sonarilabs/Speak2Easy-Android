@@ -76,7 +76,6 @@ data class PracticePlan(val source: PracticeSource, val options: PracticeOptions
 
 @Composable
 fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
-    BackHandler { onExit() }
     val c = SonariTheme.colors
 
     if (plan == null) {
@@ -97,9 +96,17 @@ fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
     )
     val state = viewModel.state
 
+    var resumeMicAfterPermission by remember { mutableStateOf(false) }
+    BackHandler {
+        if (state.phase != PracticePhase.COMPLETED || !state.isSavingCompletion) {
+            onExit()
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         viewModel.onPermissionResult(granted)
-        if (granted) viewModel.startRecording()
+        if (granted && resumeMicAfterPermission) viewModel.onManualMicTap()
+        resumeMicAfterPermission = false
     }
     LaunchedEffect(Unit) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -133,24 +140,29 @@ fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
                 when (state.phase) {
                     PracticePhase.LOADING -> CircularProgressIndicator(color = c.accent, modifier = Modifier.align(Alignment.Center))
                     PracticePhase.ERROR -> ErrorContent(state.errorMessage, onExit)
-                    PracticePhase.COMPLETED -> CompletionContent(state, onExit)
+                    PracticePhase.COMPLETED -> CompletionContent(
+                        state = state,
+                        onExit = onExit,
+                        onRetrySave = viewModel::retryCompletionSave,
+                    )
                     PracticePhase.ACTIVE -> ActiveContent(
                         state = state,
                         onExitRequest = { showExitConfirm = true },
                         onPrev = viewModel::goPrev,
-                        onPlay = { viewModel.playCurrent() },
+                        onPlay = viewModel::onManualSpeakerTap,
                         onRevealHint = viewModel::revealHint,
                         onSkip = viewModel::onSkip,
                         onRecordToggle = {
                             if (state.isRecording) {
-                                viewModel.stopRecordingAndSubmit()
+                                viewModel.onManualMicTap()
                             } else {
                                 val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                                     PackageManager.PERMISSION_GRANTED
                                 if (granted) {
                                     viewModel.onPermissionResult(true)
-                                    viewModel.startRecording()
+                                    viewModel.onManualMicTap()
                                 } else {
+                                    resumeMicAfterPermission = true
                                     permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                 }
                             }
@@ -310,7 +322,7 @@ private fun ActiveContent(
                     .clip(CircleShape)
                     .background(c.surfacePrimary)
                     .border(1.5.dp, c.accent, CircleShape)
-                    .clickable(enabled = !state.isRecording, onClick = onPlay),
+                    .clickable(enabled = !state.isSubmitting && (!state.isRecording || state.isHandsFree), onClick = onPlay),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -459,7 +471,11 @@ private fun ResultOverlay(result: PracticeResultUi) {
 }
 
 @Composable
-private fun CompletionContent(state: PracticeUiState, onExit: () -> Unit) {
+private fun CompletionContent(
+    state: PracticeUiState,
+    onExit: () -> Unit,
+    onRetrySave: () -> Unit,
+) {
     val c = SonariTheme.colors
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -497,12 +513,37 @@ private fun CompletionContent(state: PracticeUiState, onExit: () -> Unit) {
         }
 
         Spacer(Modifier.height(32.dp))
+        if (state.isSavingCompletion) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(color = c.accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Saving progress...", style = SonariFonts.monoTiny, color = c.textSecondary)
+            }
+            Spacer(Modifier.height(12.dp))
+        } else if (state.completionErrorMessage != null) {
+            Text(
+                state.completionErrorMessage,
+                style = SonariFonts.monoTiny,
+                color = c.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+        }
         Button(
-            onClick = onExit,
+            onClick = if (state.completionErrorMessage != null) onRetrySave else onExit,
+            enabled = !state.isSavingCompletion,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.buttonText),
         ) {
-            Text("DONE", style = SonariFonts.monoSmall)
+            Text(
+                when {
+                    state.isSavingCompletion -> "SAVING"
+                    state.completionErrorMessage != null -> "RETRY SAVE"
+                    else -> "DONE"
+                },
+                style = SonariFonts.monoSmall,
+            )
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -76,7 +76,34 @@ fun computeUnlocked(
 /** Matches the backend's `completed_items >= CEIL(total_items * 0.8)` unlock rule. */
 private const val LOCAL_UNLOCK_THRESHOLD = 0.8f
 
-/** Groups API word-group items into the three display sections. */
+/**
+ * Curriculum sort order for word-group labels. Mirrors the backend's `ROW_NUMBER OVER (ORDER BY ...)`
+ * exactly (content.ts), so on-screen order matches the unlock sequence:
+ *   A & Ka → Sa & Ta → Na & Ha → Ma & Ya → Ra/Wa/N → Combined → Voiced → Double Cons → Long Vowels
+ * Without this, alphabetical sorting puts "Combined Sounds" right after "A & Ka Row" which makes
+ * users think Combined is the next lesson — but the backend won't unlock it until Long Vowels is done.
+ */
+private fun wordGroupSortOrder(label: String): Int = when {
+    label.endsWith("-a-ko") -> 0
+    label.endsWith("-sa-to") -> 1
+    label.endsWith("-na-ho") -> 2
+    label.endsWith("-ma-yo") -> 3
+    label.endsWith("-ra-n") -> 4
+    label.endsWith("-contracted") -> 10
+    label.endsWith("-diacritical") -> 11
+    label.endsWith("-double-cons") -> 12
+    label.endsWith("-long-vowels") -> 13
+    label.startsWith("genki-ch") -> {
+        // "genki-ch01-1" → chapter 1, part 1 → 101. Chapter*100 + part keeps natural order.
+        val parts = label.removePrefix("genki-ch").split("-")
+        val ch = parts.getOrNull(0)?.toIntOrNull() ?: 99
+        val pt = parts.getOrNull(1)?.toIntOrNull() ?: 99
+        ch * 100 + pt
+    }
+    else -> 999
+}
+
+/** Groups API word-group items into the three display sections, each curriculum-ordered. */
 fun buildWordSections(groups: List<ContentGroupItem>): List<WordGroupSection> {
     val hira = mutableListOf<WordGroupInfo>()
     val kata = mutableListOf<WordGroupInfo>()
@@ -101,9 +128,10 @@ fun buildWordSections(groups: List<ContentGroupItem>): List<WordGroupSection> {
             else -> vocab += info
         }
     }
+    val sortByOrder = compareBy<WordGroupInfo> { wordGroupSortOrder(it.groupLabel) }
     return buildList {
-        if (hira.isNotEmpty()) add(WordGroupSection("Hiragana Words", "Core hiragana vocabulary by group", hira))
-        if (kata.isNotEmpty()) add(WordGroupSection("Katakana Words", "Loanwords & foreign terms", kata))
-        if (vocab.isNotEmpty()) add(WordGroupSection("Essential Vocabulary", "Curated sets — beginner to advanced", vocab))
+        if (hira.isNotEmpty()) add(WordGroupSection("Hiragana Words", "Core hiragana vocabulary by group", hira.sortedWith(sortByOrder)))
+        if (kata.isNotEmpty()) add(WordGroupSection("Katakana Words", "Loanwords & foreign terms", kata.sortedWith(sortByOrder)))
+        if (vocab.isNotEmpty()) add(WordGroupSection("Essential Vocabulary", "Curated sets — beginner to advanced", vocab.sortedWith(sortByOrder)))
     }
 }

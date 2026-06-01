@@ -38,6 +38,9 @@ enum class PracticePhase { LOADING, ACTIVE, COMPLETED, ERROR }
 data class PracticeUiState(
     val phase: PracticePhase = PracticePhase.LOADING,
     val errorMessage: String? = null,
+    val isSavingCompletion: Boolean = false,
+    val completionErrorMessage: String? = null,
+    val isHandsFree: Boolean = false,
     val items: List<PracticeItemUi> = emptyList(),
     val currentIndex: Int = 0,
     val isRecording: Boolean = false,
@@ -69,14 +72,21 @@ class PracticeViewModel(
     private val haptics: HapticsManager,
 ) : ViewModel() {
 
-    var state by mutableStateOf(PracticeUiState(focusMode = plan.options.isFocusMode))
+    var state by mutableStateOf(
+        PracticeUiState(
+            focusMode = plan.options.isFocusMode,
+            isHandsFree = plan.options.isHandsFree,
+        ),
+    )
         private set
 
     private var sessionId: String? = null
     private val firstAttempt = mutableMapOf<String, Boolean>()
     private val skipped = mutableListOf<String>()
     private var recordJob: Job? = null
+    private var autoRecordJob: Job? = null
     private var advanceJob: Job? = null
+    private var completionJob: Job? = null
     private var hasMicPermission = false
 
     /**
@@ -91,6 +101,10 @@ class PracticeViewModel(
 
     fun onPermissionResult(granted: Boolean) {
         hasMicPermission = granted
+        if (granted && plan.options.isHandsFree && state.phase == PracticePhase.ACTIVE && !handsFreePaused) {
+            state = state.copy(errorMessage = null)
+            maybeAutoStart()
+        }
     }
 
     fun dismissError() {
@@ -169,14 +183,27 @@ class PracticeViewModel(
      */
     fun onManualSpeakerTap() {
         if (plan.options.isHandsFree) {
-            handsFreePaused = true
-            recordJob?.cancel()
-            advanceJob?.cancel()
+            pauseHandsFree(cancelRecording = true, stopPlayback = true)
         }
         playCurrent()
     }
 
+    fun onManualMicTap() {
+        if (state.isSubmitting || state.showResult || state.phase != PracticePhase.ACTIVE) return
+        if (!plan.options.isHandsFree) {
+            if (state.isRecording) stopRecordingAndSubmit() else startRecording()
+            return
+        }
+        if (handsFreePaused) {
+            handsFreePaused = false
+            startRecording()
+        } else {
+            pauseHandsFree(cancelRecording = true, stopPlayback = true)
+        }
+    }
+
     fun startRecording() {
+        if (state.phase != PracticePhase.ACTIVE || state.currentItem == null) return
         if (!hasMicPermission) {
             state = state.copy(errorMessage = "Microphone permission is needed to practice speaking.")
             return
@@ -184,6 +211,7 @@ class PracticeViewModel(
         if (state.isRecording || state.isSubmitting || state.showResult) return
         // User explicitly asked to record — opt back into hands-free auto-flow for this item.
         handsFreePaused = false
+        autoRecordJob?.cancel()
         try {
             recorder.start()
         } catch (_: Exception) {
@@ -236,6 +264,7 @@ class PracticeViewModel(
         advanceJob = viewModelScope.launch {
             delay(if (isCorrect) CORRECT_DELAY_MS else INCORRECT_DELAY_MS)
             state = state.copy(showResult = false, lastResult = null)
+            if (handsFreePaused) return@launch
             if (isCorrect) {
                 advance()
             } else {
@@ -268,8 +297,10 @@ class PracticeViewModel(
     fun goPrev() {
         if (state.currentIndex <= 0) return
         advanceJob?.cancel()
+        autoRecordJob?.cancel()
         recordJob?.cancel()
         if (state.isRecording) runCatching { recorder.cancel() }
+        if (plan.options.isHandsFree) handsFreePaused = true
         state = state.copy(
             currentIndex = state.currentIndex - 1,
             hintRevealed = false,
@@ -299,14 +330,15 @@ class PracticeViewModel(
         if (!plan.options.isHandsFree) return
         if (handsFreePaused) return  // user took manual control on this item
         if (plan.options.autoPlayAudio) {
-            playCurrent(then = { scheduleAutoRecord() })
+            playCurrent(then = { if (!handsFreePaused) scheduleAutoRecord() })
         } else {
             scheduleAutoRecord()
         }
     }
 
     private fun scheduleAutoRecord() {
-        viewModelScope.launch {
+        autoRecordJob?.cancel()
+        autoRecordJob = viewModelScope.launch {
             delay(AUTO_RECORD_DELAY_MS)
             if (state.phase == PracticePhase.ACTIVE && !state.isRecording && !state.isSubmitting && !state.showResult && !handsFreePaused) {
                 startRecording()
@@ -314,17 +346,61 @@ class PracticeViewModel(
         }
     }
 
+    private fun pauseHandsFree(cancelRecording: Boolean, stopPlayback: Boolean) {
+        if (!plan.options.isHandsFree) return
+        handsFreePaused = true
+        autoRecordJob?.cancel()
+        recordJob?.cancel()
+        advanceJob?.cancel()
+        if (stopPlayback) {
+            tts.stop()
+            if (state.isPlaying) state = state.copy(isPlaying = false)
+        }
+        if (cancelRecording && state.isRecording) {
+            recorder.cancel()
+            state = state.copy(isRecording = false)
+        }
+    }
+
     private fun complete() {
         val firstTry = firstAttempt.values.count { it }
         val needs = state.items.filter { firstAttempt[it.contentId] == false }
-        state = state.copy(phase = PracticePhase.COMPLETED, firstTryCorrect = firstTry, needsPractice = needs)
+        state = state.copy(
+            phase = PracticePhase.COMPLETED,
+            firstTryCorrect = firstTry,
+            needsPractice = needs,
+        )
+        saveCompletedSession()
+    }
+
+    fun retryCompletionSave() {
+        if (state.phase == PracticePhase.COMPLETED) saveCompletedSession()
+    }
+
+    private fun saveCompletedSession() {
         val sid = sessionId ?: return
-        viewModelScope.launch { runCatching { practiceRepo.completeSession(sid, skipped.toList()) } }
+        if (completionJob?.isActive == true) return
+        val skippedSnapshot = skipped.toList()
+        state = state.copy(isSavingCompletion = true, completionErrorMessage = null)
+        completionJob = viewModelScope.launch {
+            runCatching { practiceRepo.completeSession(sid, skippedSnapshot) }
+                .onSuccess {
+                    state = state.copy(isSavingCompletion = false, completionErrorMessage = null)
+                }
+                .onFailure { e ->
+                    state = state.copy(
+                        isSavingCompletion = false,
+                        completionErrorMessage = e.message ?: "Couldn't save progress.",
+                    )
+                }
+        }
     }
 
     override fun onCleared() {
         recordJob?.cancel()
+        autoRecordJob?.cancel()
         advanceJob?.cancel()
+        completionJob?.cancel()
         recorder.cancel()
         tts.shutdown()
     }

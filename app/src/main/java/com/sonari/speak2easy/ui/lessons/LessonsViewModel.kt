@@ -20,6 +20,14 @@ data class LessonsUiState(
     val katakanaUnlocked: Map<String, Boolean> = emptyMap(),
     val wordSections: List<WordGroupSection> = emptyList(),
     val wordsAccessible: Boolean = true,
+    // Per-group unlock state from /lessons?charset=words → wordGroups[*].isUnlocked.
+    // Matches iOS behavior: a group is locked only when the API explicitly returns
+    // false for it; missing key = treat as unlocked (the backend exhaustively lists
+    // every group the user can see, so missing in practice means no data yet).
+    val wordGroupUnlocked: Map<String, Boolean> = emptyMap(),
+    // Per-group progress as a 0..1 fraction (completed_items / total_items). Drives
+    // the progress bar on each WordGroupCard, same treatment as LessonCard.
+    val wordGroupProgress: Map<String, Float> = emptyMap(),
     val error: String? = null,
 )
 
@@ -86,9 +94,21 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
     private suspend fun loadWords() {
         val groupsResp = repo.getContentGroups("word")
         val lessonsResp = runCatching { repo.getLessons("words") }.getOrNull()
+        val perGroupUnlocked = lessonsResp?.wordGroups
+            ?.associate { it.groupLabel to it.isUnlocked }
+            .orEmpty()
+        val perGroupProgress = lessonsResp?.wordGroups
+            ?.associate { wg ->
+                wg.groupLabel to (
+                    if (wg.totalItems > 0) wg.completedItems.toFloat() / wg.totalItems else 0f
+                )
+            }
+            .orEmpty()
         state = state.copy(
             wordSections = buildWordSections(groupsResp.groups),
             wordsAccessible = lessonsResp?.categoryAccessible ?: true,
+            wordGroupUnlocked = perGroupUnlocked,
+            wordGroupProgress = perGroupProgress,
         )
     }
 

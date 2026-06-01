@@ -138,6 +138,7 @@ fun WordGroupCard(
     group: WordGroupInfo,
     accent: Color,
     enabled: Boolean,
+    progress: Float = 0f,
     onClick: () -> Unit,
 ) {
     val c = SonariTheme.colors
@@ -168,7 +169,7 @@ fun WordGroupCard(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
         )
-        // Bottom row: word count on the left, script badge (or lock) on the right.
+        // Middle row: word count on the left, status pill on the right (lock / DONE / kana badge).
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -179,11 +180,26 @@ fun WordGroupCard(
                 color = if (enabled) accent else c.textTertiary,
                 modifier = Modifier.weight(1f),
             )
-            if (!enabled) {
-                Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = c.textTertiary, modifier = Modifier.size(16.dp))
-            } else {
-                Text(group.charsetBadge(), style = SonariFonts.monoTiny, color = accent)
+            when {
+                !enabled -> Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = c.textTertiary, modifier = Modifier.size(16.dp))
+                progress >= 1f -> Text("DONE", style = SonariFonts.monoTiny, color = c.success)
+                else -> Text(group.charsetBadge(), style = SonariFonts.monoTiny, color = accent)
             }
+        }
+        // Progress bar — same treatment as LessonCard. Only renders when the user has made
+        // some progress on this group (matches the backend's `completed_items > 0` signal).
+        if (enabled && progress > 0f) {
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                color = accent,
+                trackColor = c.surfaceSecondary,
+                drawStopIndicator = {},
+                gapSize = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+            )
         }
     }
 }

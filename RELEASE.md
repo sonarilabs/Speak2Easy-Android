@@ -133,13 +133,10 @@ uploading:
 # One-time: install bundletool
 brew install bundletool
 
-# Extract device-specific APKs and install
-bundletool build-apks \
-  --bundle=app/build/outputs/bundle/release/app-release.aab \
-  --output=/tmp/speak2easy.apks --connected-device \
-  --ks=$HOME/.android/speak2easy-upload.jks \
-  --ks-key-alias=speak2easy-upload
-bundletool install-apks --apks=/tmp/speak2easy.apks
+# Rebuild the AAB first, then extract device-specific APKs and install.
+# Pass a device serial if you are not using R5CX20Z8VZA.
+export KS_PASS="<upload-keystore-password>"
+./scripts/install-latest-release.sh R5CX20Z8VZA
 ```
 
 Smoke-test the critical paths: sign-in (Google + Email), Practice session,

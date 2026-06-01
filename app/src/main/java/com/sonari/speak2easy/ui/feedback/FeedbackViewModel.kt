@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import com.sonari.speak2easy.data.auth.AuthRepository
 import com.sonari.speak2easy.data.feedback.FeedbackRepository
 import com.sonari.speak2easy.data.remote.dto.FeedbackRequest
+import com.sonari.speak2easy.util.TextSanitizer
 import kotlinx.coroutines.launch
 
 /** Visible state of the bug-report screen. */
@@ -54,7 +55,7 @@ class FeedbackViewModel(
     fun setMessage(text: String) {
         // Soft cap at MAX_MESSAGE_CHARS — the field-level enforcement also clamps, but defending
         // here guards against programmatic setMessage calls (e.g. tests).
-        state = state.copy(message = text.take(MAX_MESSAGE_CHARS))
+        state = state.copy(message = TextSanitizer.cleanMultilineText(text, MAX_MESSAGE_CHARS))
     }
 
     /** Adds the picked Uris, ignoring any that would push past [MAX_IMAGES]. */
@@ -96,13 +97,15 @@ class FeedbackViewModel(
             return
         }
         val payloadImages = encodedImages.filterNotNull()
+        val cleanMessage = TextSanitizer.cleanMultilineText(state.message, MAX_MESSAGE_CHARS).trim()
+        val cleanScreen = TextSanitizer.cleanFreeText(currentScreen, 100)
         val request = FeedbackRequest(
             category = state.category.apiValue,
-            message = state.message.trim(),
+            message = cleanMessage,
             imagesBase64 = payloadImages,
             deviceInfo = feedbackRepo.collectDeviceInfo(),
             appVersion = feedbackRepo.appVersion(),
-            currentScreen = currentScreen,
+            currentScreen = cleanScreen,
         )
         state = state.copy(isSubmitting = true, errorMessage = null)
         viewModelScope.launch {

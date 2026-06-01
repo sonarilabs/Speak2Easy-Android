@@ -31,12 +31,24 @@ enum class PracticeTime(
     val display: String,
     val shortLabel: String,
     val timeRange: String,
-    val reminderTime: String,
+    /**
+     * Lower-bound hour of the tile's window — used both as the daily reminder hour
+     * (local AlarmManager) and the backend's `reminder_time`. Morning fires at 6am,
+     * Afternoon at noon, Evening at 6pm. Flexible has no window so we default to 8pm,
+     * the most common "evening study" slot for learners without a strict schedule.
+     */
+    val lowerBoundHour: Int,
 ) {
-    MORNING("morning", "Morning (6am – 12pm)", "Morning", "6am – 12pm", "08:00:00"),
-    AFTERNOON("afternoon", "Afternoon (12pm – 6pm)", "Afternoon", "12pm – 6pm", "13:00:00"),
-    EVENING("evening", "Evening (6pm – 12am)", "Evening", "6pm – 12am", "19:00:00"),
-    FLEXIBLE("flexible", "Flexible / No preference", "Flexible", "Anytime", "09:00:00"),
+    MORNING("morning", "Morning (6am – 12pm)", "Morning", "6am – 12pm", 6),
+    AFTERNOON("afternoon", "Afternoon (12pm – 6pm)", "Afternoon", "12pm – 6pm", 12),
+    EVENING("evening", "Evening (6pm – 12am)", "Evening", "6pm – 12am", 18),
+    FLEXIBLE("flexible", "Flexible / No preference", "Flexible", "Anytime", 20);
+
+    /** HH:mm:ss string for the backend's `daily_reminder_time` payload. */
+    val reminderTime: String get() = "%02d:00:00".format(lowerBoundHour)
+
+    /** Minute-of-day for [com.sonari.speak2easy.data.prefs.SonariPreferences.reminderMinuteOfDay]. */
+    val reminderMinuteOfDay: Int get() = lowerBoundHour * 60
 }
 
 data class Country(val code: String, val name: String, val flag: String)
@@ -143,19 +155,155 @@ data class UsCity(val name: String, val stateCode: String?)
 /** Sentinel meaning "let me type my own city" — shown last in the dropdown. */
 val UsCityOther = UsCity("Other (type below)", null)
 
-/** Top US metros + the OTHER sentinel. Picking one of these can also pre-fill State. */
-val UsCities: List<UsCity> = (listOf(
-    UsCity("New York", "NY"), UsCity("Los Angeles", "CA"), UsCity("Chicago", "IL"),
-    UsCity("Houston", "TX"), UsCity("Phoenix", "AZ"), UsCity("Philadelphia", "PA"),
-    UsCity("San Antonio", "TX"), UsCity("San Diego", "CA"), UsCity("Dallas", "TX"),
-    UsCity("San Jose", "CA"), UsCity("Austin", "TX"), UsCity("Jacksonville", "FL"),
-    UsCity("Fort Worth", "TX"), UsCity("Columbus", "OH"), UsCity("Charlotte", "NC"),
-    UsCity("Indianapolis", "IN"), UsCity("San Francisco", "CA"), UsCity("Seattle", "WA"),
-    UsCity("Denver", "CO"), UsCity("Boston", "MA"), UsCity("Detroit", "MI"),
-    UsCity("Nashville", "TN"), UsCity("Portland", "OR"), UsCity("Las Vegas", "NV"),
-    UsCity("Atlanta", "GA"), UsCity("Miami", "FL"), UsCity("Minneapolis", "MN"),
-    UsCity("Washington", "DC"), UsCity("Baltimore", "MD"), UsCity("Honolulu", "HI"),
-).sortedBy { it.name }) + UsCityOther
+/**
+ * Major US cities indexed by state, ported verbatim from iOS `USCity.allCities`. Each list
+ * is the top ~3–8 cities per state by population/relevance — covers the common case without
+ * exploding the dropdown. The OTHER sentinel is appended by [citiesFor] when the state is
+ * known but the user wants to type something custom.
+ */
+val UsCities: List<UsCity> = listOf(
+    // Alabama
+    UsCity("Birmingham", "AL"), UsCity("Montgomery", "AL"), UsCity("Huntsville", "AL"),
+    UsCity("Mobile", "AL"), UsCity("Tuscaloosa", "AL"),
+    // Alaska
+    UsCity("Anchorage", "AK"), UsCity("Fairbanks", "AK"), UsCity("Juneau", "AK"),
+    // Arizona
+    UsCity("Phoenix", "AZ"), UsCity("Tucson", "AZ"), UsCity("Mesa", "AZ"),
+    UsCity("Scottsdale", "AZ"), UsCity("Tempe", "AZ"),
+    // Arkansas
+    UsCity("Little Rock", "AR"), UsCity("Fayetteville", "AR"), UsCity("Fort Smith", "AR"),
+    // California
+    UsCity("Los Angeles", "CA"), UsCity("San Francisco", "CA"), UsCity("San Diego", "CA"),
+    UsCity("San Jose", "CA"), UsCity("Sacramento", "CA"), UsCity("Oakland", "CA"),
+    UsCity("Fresno", "CA"), UsCity("Long Beach", "CA"), UsCity("Irvine", "CA"),
+    UsCity("Santa Monica", "CA"), UsCity("Palo Alto", "CA"), UsCity("Berkeley", "CA"),
+    // Colorado
+    UsCity("Denver", "CO"), UsCity("Colorado Springs", "CO"), UsCity("Aurora", "CO"),
+    UsCity("Boulder", "CO"), UsCity("Fort Collins", "CO"),
+    // Connecticut
+    UsCity("Hartford", "CT"), UsCity("New Haven", "CT"), UsCity("Stamford", "CT"),
+    UsCity("Bridgeport", "CT"),
+    // Delaware
+    UsCity("Wilmington", "DE"), UsCity("Dover", "DE"), UsCity("Newark", "DE"),
+    // Florida
+    UsCity("Miami", "FL"), UsCity("Orlando", "FL"), UsCity("Tampa", "FL"),
+    UsCity("Jacksonville", "FL"), UsCity("Fort Lauderdale", "FL"),
+    UsCity("St. Petersburg", "FL"), UsCity("Tallahassee", "FL"), UsCity("Gainesville", "FL"),
+    // Georgia
+    UsCity("Atlanta", "GA"), UsCity("Savannah", "GA"), UsCity("Augusta", "GA"),
+    UsCity("Athens", "GA"), UsCity("Macon", "GA"),
+    // Hawaii
+    UsCity("Honolulu", "HI"), UsCity("Hilo", "HI"), UsCity("Kailua", "HI"),
+    // Idaho
+    UsCity("Boise", "ID"), UsCity("Idaho Falls", "ID"), UsCity("Nampa", "ID"),
+    // Illinois
+    UsCity("Chicago", "IL"), UsCity("Aurora", "IL"), UsCity("Naperville", "IL"),
+    UsCity("Springfield", "IL"), UsCity("Evanston", "IL"),
+    // Indiana
+    UsCity("Indianapolis", "IN"), UsCity("Fort Wayne", "IN"), UsCity("South Bend", "IN"),
+    UsCity("Bloomington", "IN"),
+    // Iowa
+    UsCity("Des Moines", "IA"), UsCity("Cedar Rapids", "IA"), UsCity("Iowa City", "IA"),
+    // Kansas
+    UsCity("Wichita", "KS"), UsCity("Kansas City", "KS"), UsCity("Topeka", "KS"),
+    UsCity("Lawrence", "KS"),
+    // Kentucky
+    UsCity("Louisville", "KY"), UsCity("Lexington", "KY"), UsCity("Bowling Green", "KY"),
+    // Louisiana
+    UsCity("New Orleans", "LA"), UsCity("Baton Rouge", "LA"), UsCity("Shreveport", "LA"),
+    // Maine
+    UsCity("Portland", "ME"), UsCity("Augusta", "ME"), UsCity("Bangor", "ME"),
+    // Maryland
+    UsCity("Baltimore", "MD"), UsCity("Annapolis", "MD"), UsCity("Rockville", "MD"),
+    UsCity("Bethesda", "MD"),
+    // Massachusetts
+    UsCity("Boston", "MA"), UsCity("Cambridge", "MA"), UsCity("Worcester", "MA"),
+    UsCity("Springfield", "MA"),
+    // Michigan
+    UsCity("Detroit", "MI"), UsCity("Grand Rapids", "MI"), UsCity("Ann Arbor", "MI"),
+    UsCity("Lansing", "MI"),
+    // Minnesota
+    UsCity("Minneapolis", "MN"), UsCity("St. Paul", "MN"), UsCity("Rochester", "MN"),
+    UsCity("Duluth", "MN"),
+    // Mississippi
+    UsCity("Jackson", "MS"), UsCity("Gulfport", "MS"), UsCity("Biloxi", "MS"),
+    // Missouri
+    UsCity("Kansas City", "MO"), UsCity("St. Louis", "MO"), UsCity("Springfield", "MO"),
+    UsCity("Columbia", "MO"),
+    // Montana
+    UsCity("Billings", "MT"), UsCity("Missoula", "MT"), UsCity("Helena", "MT"),
+    // Nebraska
+    UsCity("Omaha", "NE"), UsCity("Lincoln", "NE"),
+    // Nevada
+    UsCity("Las Vegas", "NV"), UsCity("Reno", "NV"), UsCity("Henderson", "NV"),
+    // New Hampshire
+    UsCity("Manchester", "NH"), UsCity("Concord", "NH"), UsCity("Nashua", "NH"),
+    // New Jersey
+    UsCity("Newark", "NJ"), UsCity("Jersey City", "NJ"), UsCity("Trenton", "NJ"),
+    UsCity("Princeton", "NJ"), UsCity("Hoboken", "NJ"),
+    // New Mexico
+    UsCity("Albuquerque", "NM"), UsCity("Santa Fe", "NM"), UsCity("Las Cruces", "NM"),
+    // New York
+    UsCity("New York City", "NY"), UsCity("Buffalo", "NY"), UsCity("Rochester", "NY"),
+    UsCity("Albany", "NY"), UsCity("Syracuse", "NY"), UsCity("Yonkers", "NY"),
+    // North Carolina
+    UsCity("Charlotte", "NC"), UsCity("Raleigh", "NC"), UsCity("Durham", "NC"),
+    UsCity("Greensboro", "NC"), UsCity("Asheville", "NC"),
+    // North Dakota
+    UsCity("Fargo", "ND"), UsCity("Bismarck", "ND"),
+    // Ohio
+    UsCity("Columbus", "OH"), UsCity("Cleveland", "OH"), UsCity("Cincinnati", "OH"),
+    UsCity("Toledo", "OH"), UsCity("Akron", "OH"),
+    // Oklahoma
+    UsCity("Oklahoma City", "OK"), UsCity("Tulsa", "OK"), UsCity("Norman", "OK"),
+    // Oregon
+    UsCity("Portland", "OR"), UsCity("Eugene", "OR"), UsCity("Salem", "OR"),
+    UsCity("Bend", "OR"),
+    // Pennsylvania
+    UsCity("Philadelphia", "PA"), UsCity("Pittsburgh", "PA"), UsCity("Harrisburg", "PA"),
+    UsCity("Allentown", "PA"),
+    // Rhode Island
+    UsCity("Providence", "RI"), UsCity("Warwick", "RI"), UsCity("Newport", "RI"),
+    // South Carolina
+    UsCity("Charleston", "SC"), UsCity("Columbia", "SC"), UsCity("Greenville", "SC"),
+    // South Dakota
+    UsCity("Sioux Falls", "SD"), UsCity("Rapid City", "SD"),
+    // Tennessee
+    UsCity("Nashville", "TN"), UsCity("Memphis", "TN"), UsCity("Knoxville", "TN"),
+    UsCity("Chattanooga", "TN"),
+    // Texas
+    UsCity("Houston", "TX"), UsCity("Dallas", "TX"), UsCity("Austin", "TX"),
+    UsCity("San Antonio", "TX"), UsCity("Fort Worth", "TX"), UsCity("El Paso", "TX"),
+    UsCity("Plano", "TX"), UsCity("Arlington", "TX"),
+    // Utah
+    UsCity("Salt Lake City", "UT"), UsCity("Provo", "UT"), UsCity("Park City", "UT"),
+    // Vermont
+    UsCity("Burlington", "VT"), UsCity("Montpelier", "VT"),
+    // Virginia
+    UsCity("Virginia Beach", "VA"), UsCity("Richmond", "VA"), UsCity("Norfolk", "VA"),
+    UsCity("Arlington", "VA"), UsCity("Alexandria", "VA"),
+    // Washington
+    UsCity("Seattle", "WA"), UsCity("Spokane", "WA"), UsCity("Tacoma", "WA"),
+    UsCity("Bellevue", "WA"), UsCity("Olympia", "WA"),
+    // West Virginia
+    UsCity("Charleston", "WV"), UsCity("Huntington", "WV"),
+    // Wisconsin
+    UsCity("Milwaukee", "WI"), UsCity("Madison", "WI"), UsCity("Green Bay", "WI"),
+    // Wyoming
+    UsCity("Cheyenne", "WY"), UsCity("Casper", "WY"), UsCity("Jackson", "WY"),
+    // Washington D.C.
+    UsCity("Washington", "DC"),
+)
+
+/**
+ * Cities filtered to [stateCode], alphabetized, with the OTHER sentinel always last.
+ * Returns just the OTHER option if no state is selected — keeps the dropdown usable
+ * even before the user picks a state (though we hide the City field in that case).
+ */
+fun citiesFor(stateCode: String?): List<UsCity> {
+    if (stateCode.isNullOrEmpty()) return listOf(UsCityOther)
+    return UsCities.filter { it.stateCode == stateCode }.sortedBy { it.name } + UsCityOther
+}
 
 val MonthNames = listOf(
     "January", "February", "March", "April", "May", "June",
@@ -184,7 +332,14 @@ data class OnboardingForm(
             val nameOk = displayName.trim().length in 2..20
             val dateOk = birthYear != null && birthMonth != null
             val countryOk = countryCode.isNotEmpty()
-            val usExtrasOk = countryCode != "US" || (!state.isNullOrBlank() && !city.isNullOrBlank())
+            val usExtrasOk = if (countryCode != "US") true else {
+                val stateOk = !state.isNullOrBlank()
+                // ≥3 letter-only chars. Applies to both dropdown picks (Nashville, LA, etc.,
+                // all pass naturally) and the typed-in Other path. Blocks "" / "St" / "NYC123".
+                val cityOk = !city.isNullOrBlank() &&
+                    com.sonari.speak2easy.util.TextSanitizer.isValidCity(city)
+                stateOk && cityOk
+            }
             return nameOk && dateOk && countryOk && usExtrasOk
         }
 

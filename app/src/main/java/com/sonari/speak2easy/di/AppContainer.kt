@@ -2,6 +2,7 @@ package com.sonari.speak2easy.di
 
 import android.content.Context
 import com.sonari.speak2easy.data.auth.AuthRepository
+import com.sonari.speak2easy.data.auth.AuthState
 import com.sonari.speak2easy.data.auth.TokenStore
 import com.sonari.speak2easy.data.feedback.FeedbackRepository
 import com.sonari.speak2easy.data.lessons.LessonRepository
@@ -98,12 +99,28 @@ class AppContainer(context: Context) {
     val authRepository = AuthRepository(authApi, userApi, tokenStore, json)
     val lessonRepository = LessonRepository(contentApi, json)
     val progressRepository = ProgressRepository(userApi, practiceApi, json)
-    val practiceRepository = PracticeRepository(practiceApi, json, progressRepository)
+    val practiceRepository = PracticeRepository(practiceApi, json, progressRepository, lessonRepository)
     val strokeRepository = StrokeRepository(writingApi, json)
     val feedbackRepository = FeedbackRepository(feedbackApi, json, appContext)
 
+    private var activeUserId: String? = null
+
     init {
         appScope.launch { authRepository.restoreSession() }
+        appScope.launch {
+            authRepository.authState.collect { state ->
+                val nextUserId = when (state) {
+                    is AuthState.Authenticated -> state.user.userId
+                    is AuthState.PendingVerification -> state.user.userId
+                    else -> null
+                }
+                val previousUserId = activeUserId
+                if (previousUserId != null && previousUserId != nextUserId) {
+                    clearUserScopedCaches()
+                }
+                activeUserId = nextUserId
+            }
+        }
         appScope.launch { preferences.hapticsEnabled.collect { hapticsManager.enabled = it } }
         // Keep the daily reminder alarm in sync with the toggle + chosen time.
         appScope.launch {
@@ -116,6 +133,12 @@ class AppContainer(context: Context) {
                     }
                 }
         }
+    }
+
+    private suspend fun clearUserScopedCaches() {
+        lessonRepository.invalidateAll()
+        progressRepository.invalidateAll()
+        strokeRepository.invalidateAll()
     }
 
     private companion object {

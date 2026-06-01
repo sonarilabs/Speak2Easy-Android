@@ -1,5 +1,10 @@
 package com.sonari.speak2easy.ui.onboarding
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,21 +25,56 @@ import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.sonari.speak2easy.di.LocalAppContainer
 import com.sonari.speak2easy.ui.theme.SonariFonts
 import com.sonari.speak2easy.ui.theme.SonariTheme
 import com.sonari.speak2easy.util.TextSanitizer
+import kotlinx.coroutines.launch
 
 @Composable
 fun LearningPreferencesScreen(viewModel: OnboardingViewModel, onBack: () -> Unit) {
     val c = SonariTheme.colors
     val form = viewModel.form
+    val context = LocalContext.current
+    val container = LocalAppContainer.current
+    val scope = rememberCoroutineScope()
+
+    // Tracks the most recent tile tap so the permission-result callback knows which
+    // time to persist (avoids a race if Compose recomposes `form` mid-flight).
+    var pendingTime by remember { mutableStateOf<PracticeTime?>(null) }
+
+    // Helper: write the picked tile's lower-bound hour to local prefs. AppContainer
+    // watches these via combine{} and arms the AlarmManager — we don't call the
+    // ReminderManager directly here.
+    fun persistReminder(picked: PracticeTime) {
+        scope.launch {
+            container.preferences.setReminderMinuteOfDay(picked.reminderMinuteOfDay)
+            container.preferences.setNotificationsEnabled(true)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val picked = pendingTime
+        pendingTime = null
+        if (granted && picked != null) persistReminder(picked)
+        // Denial: silent — onboarding still completes, user can flip it on later from Settings.
+    }
 
     OnboardingScaffold(
         title = "Your goals",
@@ -62,8 +102,22 @@ fun LearningPreferencesScreen(viewModel: OnboardingViewModel, onBack: () -> Unit
         }
 
         // Preferred Time — 2x2 grid of tappable cards mirroring iOS Onboarding step 2.
+        // Tap also triggers the POST_NOTIFICATIONS system prompt (first tap only on API 33+;
+        // subsequent taps are silent once the user has granted or denied). The chosen tile's
+        // lower-bound hour (6am / noon / 6pm / 8pm) becomes the daily reminder time.
         PreferredTimeGrid(selected = form.preferredPracticeTime) { picked ->
             viewModel.update { it.copy(preferredPracticeTime = picked) }
+            val needsRuntimePerm = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            val alreadyGranted = !needsRuntimePerm ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (alreadyGranted) {
+                persistReminder(picked)
+            } else {
+                pendingTime = picked
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 }

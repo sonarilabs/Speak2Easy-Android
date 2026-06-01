@@ -4,7 +4,7 @@
     <selectionStates>
       <SelectionState runConfigName="Speak2Easy">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-05-31T18:20:46.250627Z">
+        <DropdownSelection timestamp="2026-06-01T06:47:43.076746Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="PhysicalDevice" identifier="serial=R5CX20Z8VZA" />

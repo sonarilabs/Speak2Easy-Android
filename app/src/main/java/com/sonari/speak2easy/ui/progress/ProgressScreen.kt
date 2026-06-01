@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -169,7 +171,15 @@ private fun SessionRow(session: PracticeSessionSummary, onClick: () -> Unit) {
             )
         }
         if (timeLabel.isNotEmpty()) {
-            Text(timeLabel, style = SonariFonts.monoTiny, color = c.textTertiary)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                timeLabel,
+                style = SonariFonts.monoTiny,
+                color = c.textTertiary,
+                maxLines = 1,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(64.dp),
+            )
         }
     }
 }
@@ -200,7 +210,19 @@ private fun relativeTimeLabel(iso: String?): String {
 }
 
 private fun sessionTitle(session: PracticeSessionSummary): String {
-    session.groupLabel?.takeIf { it.isNotEmpty() }?.let { return formatWordGroupTitle(it) }
+    // Word-group sessions: prefix the category so rows read e.g. "Hiragana · A & Ka Row"
+    // or "Words · Chapter 1 · Part 1" instead of the bare group title. Matches the way
+    // lesson rows render ("Hiragana Vowels" / "Katakana K Row").
+    session.groupLabel?.takeIf { it.isNotEmpty() }?.let { label ->
+        val prefix = when {
+            label.startsWith("hira-") -> "Hiragana"
+            label.startsWith("kata-") -> "Katakana"
+            label.startsWith("genki-") -> "Words"
+            else -> null
+        }
+        val title = formatWordGroupTitle(label)
+        return if (prefix != null) "$prefix · $title" else title
+    }
     session.lessonNumber?.let { num ->
         val script = session.lessonCharsetDisplayName?.substringBefore(" ")
         // Resolve the lesson's static title ("Vowels", "K Row", …) so a row reads

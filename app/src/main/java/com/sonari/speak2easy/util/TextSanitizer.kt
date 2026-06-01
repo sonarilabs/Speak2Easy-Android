@@ -22,7 +22,47 @@ object TextSanitizer {
 
     const val MAX_NAME_CHARS = 20
 
+    /**
+     * Cleans a city-name input: keeps letters / space / hyphen / apostrophe / period
+     * (covers "St. Louis", "Fort Worth", "Winston-Salem", "O'Fallon"). Strips digits,
+     * control chars, and stray punctuation. Collapses internal whitespace. Capped at
+     * [MAX_CITY_CHARS] which matches the backend's 100-char field limit.
+     */
+    fun cleanCity(raw: String): String {
+        val filtered = raw.filter { ch ->
+            ch.isLetter() || ch == ' ' || ch == '-' || ch == '\'' || ch == '.'
+        }
+        return filtered.replace(Regex("\\s+"), " ").trimStart().take(MAX_CITY_CHARS)
+    }
+
+    const val MAX_CITY_CHARS = 100
+    const val MIN_CITY_CHARS = 3
+
+    /** True if [city] is acceptable as a typed-in "Other" city — letters only, ≥3 chars. */
+    fun isValidCity(city: String): Boolean {
+        val trimmed = city.trim()
+        if (trimmed.length < MIN_CITY_CHARS) return false
+        // After cleanCity strips digits/symbols, length should be unchanged. If not, the
+        // user typed disallowed characters that we silently dropped — reject so the
+        // CONTINUE button stays disabled until they fix the input.
+        return cleanCity(trimmed).length == trimmed.length
+    }
+
     /** Strip control chars + NUL + leading/trailing whitespace; cap to [maxLen]. */
     fun cleanFreeText(raw: String, maxLen: Int = 100): String =
         raw.filter { it >= ' ' }.trim().take(maxLen)
+
+    /**
+     * Cleans multiline user text while preserving readable line breaks. Removes NUL and other
+     * control characters, normalizes CRLF/CR to LF, caps blank-line runs, and caps to [maxLen].
+     * HTML/SQL escaping still belongs on the backend at the final output/query sink.
+     */
+    fun cleanMultilineText(raw: String, maxLen: Int): String {
+        val normalized = raw.replace("\r\n", "\n").replace('\r', '\n')
+        val filtered = normalized.filter { ch -> ch == '\n' || ch >= ' ' }
+        return filtered
+            .replace(Regex("[ \\t]+\\n"), "\n")
+            .replace(Regex("\\n{4,}"), "\n\n\n")
+            .take(maxLen)
+    }
 }
