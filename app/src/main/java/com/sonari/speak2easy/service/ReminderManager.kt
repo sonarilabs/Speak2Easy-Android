@@ -21,9 +21,9 @@ import java.util.Calendar
  * `ReminderManager` to avoid colliding with `android.app.NotificationManager` — semantically
  * the iOS analog of `Services/NotificationManager.swift`.
  *
- * Uses [AlarmManager.setExactAndAllowWhileIdle] (vs. inexact `setRepeating`) so the alarm fires
- * even when the device is in Doze. We declare `USE_EXACT_ALARM` in the manifest. The alarm is
- * one-shot — [ReminderReceiver] re-arms for the next day after firing.
+ * Uses [AlarmManager.setAndAllowWhileIdle] so the alarm fires even when the device is in Doze,
+ * without requiring the restricted USE_EXACT_ALARM permission. The alarm is one-shot —
+ * [ReminderReceiver] re-arms for the next day after firing.
  */
 class ReminderManager(private val context: Context) {
 
@@ -45,15 +45,9 @@ class ReminderManager(private val context: Context) {
     fun scheduleDailyReminder(hour: Int, minute: Int) {
         val pi = createOrUpdatePendingIntent(hour, minute)
         val firstFireAt = nextOccurrence(hour, minute)
-        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
-        if (canExact) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, firstFireAt, pi)
-            Log.d(TAG, "Scheduled exact alarm for $firstFireAt (h=$hour m=$minute)")
-        } else {
-            // Fallback for devices/users that revoked the special exact-alarm permission.
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, firstFireAt, pi)
-            Log.w(TAG, "Exact alarms not permitted; scheduled inexact for $firstFireAt")
-        }
+        // Use inexact alarms that allow while idle, avoiding the restricted USE_EXACT_ALARM permission
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, firstFireAt, pi)
+        Log.d(TAG, "Scheduled inexact alarm for $firstFireAt (h=$hour m=$minute)")
     }
 
     fun cancelReminder() {

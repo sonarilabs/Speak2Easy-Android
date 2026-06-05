@@ -6,7 +6,7 @@ import android.content.Intent
 
 /**
  * Fires the daily practice notification when the AlarmManager wakes us up, then re-arms the
- * alarm for the next day. We use one-shot `setExactAndAllowWhileIdle` (vs. inexact `setRepeating`)
+ * alarm for the next day. We use one-shot `setAndAllowWhileIdle` (vs. inexact `setRepeating`)
  * so the alarm survives Doze, which means the receiver itself is responsible for the daily cadence.
  */
 class ReminderReceiver : BroadcastReceiver() {
