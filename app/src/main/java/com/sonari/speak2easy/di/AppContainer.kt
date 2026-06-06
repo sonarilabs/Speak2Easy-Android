@@ -16,9 +16,11 @@ import com.sonari.speak2easy.data.remote.ContentApi
 import com.sonari.speak2easy.data.remote.FeedbackApi
 import com.sonari.speak2easy.data.remote.PracticeApi
 import com.sonari.speak2easy.data.remote.SonariJson
+import com.sonari.speak2easy.data.remote.SubscriptionApi
 import com.sonari.speak2easy.data.remote.UserApi
 import com.sonari.speak2easy.data.remote.WritingApi
 import com.sonari.speak2easy.BuildConfig
+import com.sonari.speak2easy.data.subscription.SubscriptionRepository
 import com.sonari.speak2easy.data.writing.StrokeRepository
 import com.sonari.speak2easy.service.HapticsManager
 import com.sonari.speak2easy.service.NetworkMonitor
@@ -89,6 +91,7 @@ class AppContainer(context: Context) {
     private val practiceApi: PracticeApi = retrofit.create(PracticeApi::class.java)
     private val writingApi: WritingApi = retrofit.create(WritingApi::class.java)
     private val feedbackApi: FeedbackApi = retrofit.create(FeedbackApi::class.java)
+    private val subscriptionApi: SubscriptionApi = retrofit.create(SubscriptionApi::class.java)
 
     val applicationContext: Context = appContext
 
@@ -102,6 +105,7 @@ class AppContainer(context: Context) {
     val practiceRepository = PracticeRepository(practiceApi, json, progressRepository, lessonRepository)
     val strokeRepository = StrokeRepository(writingApi, json)
     val feedbackRepository = FeedbackRepository(feedbackApi, json, appContext)
+    val subscriptionRepository = SubscriptionRepository(subscriptionApi, authRepository, json)
 
     private var activeUserId: String? = null
 

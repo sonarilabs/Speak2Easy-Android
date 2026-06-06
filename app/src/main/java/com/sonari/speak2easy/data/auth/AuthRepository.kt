@@ -232,6 +232,14 @@ class AuthRepository(
         _authState.value = AuthState.Authenticated(updated)
     }
 
+    fun updateSubscriptionTier(subscriptionTier: String?) {
+        val token = tokenStore.getToken() ?: return
+        val user = currentUser ?: return
+        val updated = user.copy(subscriptionTier = subscriptionTier)
+        tokenStore.saveSession(token, updated)
+        setAuthState(updated)
+    }
+
     fun signOut() {
         tokenStore.clear()
         _authState.value = AuthState.Unauthenticated
