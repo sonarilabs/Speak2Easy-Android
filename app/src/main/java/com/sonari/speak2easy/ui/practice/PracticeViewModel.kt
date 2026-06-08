@@ -162,6 +162,19 @@ class PracticeViewModel(
             val content = lessonRepo.getContentItems("word", charset, src.group.groupLabel, limit = 200)
             session.sessionId to content.items.map { it.toUi() }
         }
+        is PracticeSource.SentenceLesson -> {
+            // Charset-agnostic; backend ignores `charset` for content_type=sentence (NULL charset_id).
+            val session = practiceRepo.startSession(
+                StartSessionRequest(
+                    sessionType = "lesson",
+                    isHandsFree = plan.options.isHandsFree,
+                    lessonNumber = src.lessonNumber,
+                    charset = "sentences",
+                ),
+            )
+            val content = lessonRepo.getLessonContent(src.lessonNumber, "sentences", "sentence", null)
+            session.sessionId to content.items.map { it.toUi() }
+        }
     }
 
     // MARK: Audio playback / recording

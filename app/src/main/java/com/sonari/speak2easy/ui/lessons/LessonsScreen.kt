@@ -121,6 +121,7 @@ fun LessonsScreen(
         LessonCategory.WORDS -> state.wordSections.isEmpty()
         LessonCategory.HIRAGANA -> state.hiraganaUnlocked.isEmpty()
         LessonCategory.KATAKANA -> state.katakanaUnlocked.isEmpty()
+        LessonCategory.SENTENCES -> state.sentenceLessons.isEmpty()
     }
 
     Column(
@@ -222,6 +223,33 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
                         enabled = state.wordsAccessible && groupUnlocked,
                         progress = state.wordGroupProgress[group.groupLabel] ?: 0f,
                     ) { onSelect(PracticeSource.WordGroup(group)) }
+                }
+            }
+        } else if (state.category == LessonCategory.SENTENCES) {
+            val accent = c.accentFor(LessonCategory.SENTENCES)
+            item(key = "section-sentences", span = { GridItemSpan(2) }) {
+                SectionHeader("Sentences", "Speak whole sentences — gradually getting harder")
+            }
+            items(state.sentenceLessons, key = { "sentence-${it.lessonNumber}" }) { lp ->
+                LessonCard(
+                    lesson = LessonInfo(
+                        number = lp.lessonNumber,
+                        title = SentenceCurriculum.titleFor(lp.lessonNumber),
+                        subtitle = "${lp.totalItems} sentence" + if (lp.totalItems == 1) "" else "s",
+                        characters = emptyList(),
+                        apiLessonNumber = lp.lessonNumber,
+                    ),
+                    accent = accent,
+                    progress = lp.progress,
+                    unlocked = lp.isUnlocked,
+                ) {
+                    onSelect(
+                        PracticeSource.SentenceLesson(
+                            lessonNumber = lp.lessonNumber,
+                            lessonTitle = SentenceCurriculum.titleFor(lp.lessonNumber),
+                            sentenceCount = lp.totalItems,
+                        ),
+                    )
                 }
             }
         } else {

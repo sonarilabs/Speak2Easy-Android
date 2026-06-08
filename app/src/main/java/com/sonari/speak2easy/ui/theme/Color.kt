@@ -32,6 +32,8 @@ data class SonariColors(
     val accentKatakanaGlow: Color,
     val accentWords: Color,
     val accentWordsGlow: Color,
+    val accentSentences: Color,
+    val accentSentencesGlow: Color,
     val resultCorrectFill: Color,
     val resultCorrectBorder: Color,
     val resultIncorrectFill: Color,
@@ -41,12 +43,14 @@ data class SonariColors(
         LessonCategory.HIRAGANA -> accentHiragana
         LessonCategory.KATAKANA -> accentKatakana
         LessonCategory.WORDS -> accentWords
+        LessonCategory.SENTENCES -> accentSentences
     }
 
     fun glowFor(category: LessonCategory): Color = when (category) {
         LessonCategory.HIRAGANA -> accentHiraganaGlow
         LessonCategory.KATAKANA -> accentKatakanaGlow
         LessonCategory.WORDS -> accentWordsGlow
+        LessonCategory.SENTENCES -> accentSentencesGlow
     }
 }
 
@@ -71,6 +75,8 @@ val SonariLightColors = SonariColors(
     accentKatakanaGlow = Color(0xFFE879F9),
     accentWords = Color(0xFF4F46E5),
     accentWordsGlow = Color(0xFF818CF8),
+    accentSentences = Color(0xFFD97706),
+    accentSentencesGlow = Color(0xFFF59E0B),
     resultCorrectFill = Color(0xFFF0FDF4),
     resultCorrectBorder = Color(0xFF34D399),
     resultIncorrectFill = Color(0xFFFEF2F2),
@@ -98,6 +104,8 @@ val SonariDarkColors = SonariColors(
     accentKatakanaGlow = Color(0xFFE879F9),
     accentWords = Color(0xFF6366F1),
     accentWordsGlow = Color(0xFF3C3EF1),
+    accentSentences = Color(0xFFF59E0B),
+    accentSentencesGlow = Color(0xFFFBBF24),
     resultCorrectFill = Color(0xFF111827),
     resultCorrectBorder = Color(0xFF10B981),
     resultIncorrectFill = Color(0xFF111827),

@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sonari.speak2easy.data.lessons.LessonRepository
 import com.sonari.speak2easy.data.prefs.SonariPreferences
+import com.sonari.speak2easy.data.remote.dto.LessonProgress
 import com.sonari.speak2easy.model.LessonCategory
 import kotlinx.coroutines.launch
 
@@ -28,6 +29,8 @@ data class LessonsUiState(
     // Per-group progress as a 0..1 fraction (completed_items / total_items). Drives
     // the progress bar on each WordGroupCard, same treatment as LessonCard.
     val wordGroupProgress: Map<String, Float> = emptyMap(),
+    // Sentences track: numbered lessons loaded straight from /lessons?charset=sentences.
+    val sentenceLessons: List<LessonProgress> = emptyList(),
     val error: String? = null,
 )
 
@@ -70,6 +73,7 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
                         state = state.copy(katakanaProgress = p, katakanaUnlocked = u)
                     }
                     LessonCategory.WORDS -> loadWords()
+                    LessonCategory.SENTENCES -> loadSentences()
                 }
                 loaded.add(category)
             } catch (e: Exception) {
@@ -110,6 +114,12 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
             wordGroupUnlocked = perGroupUnlocked,
             wordGroupProgress = perGroupProgress,
         )
+    }
+
+    /** Sentences are charset-agnostic numbered lessons; the backend is the source of truth for unlock. */
+    private suspend fun loadSentences() {
+        val resp = repo.getLessons("sentences")
+        state = state.copy(sentenceLessons = resp.lessons)
     }
 
     class Factory(private val repo: LessonRepository) : ViewModelProvider.Factory {
