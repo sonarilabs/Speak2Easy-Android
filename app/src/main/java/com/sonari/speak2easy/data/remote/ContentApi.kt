@@ -34,6 +34,7 @@ interface ContentApi {
     suspend fun getContentGroups(
         @Query("content_type") contentType: String? = null,
         @Query("charset") charset: String? = null,
+        @Query("group") group: String? = null,
     ): ContentGroupsResponse
 
     @GET("content/items")

@@ -122,6 +122,7 @@ fun LessonsScreen(
         LessonCategory.HIRAGANA -> state.hiraganaUnlocked.isEmpty()
         LessonCategory.KATAKANA -> state.katakanaUnlocked.isEmpty()
         LessonCategory.SENTENCES -> state.sentenceLessons.isEmpty()
+        LessonCategory.TOPICS -> state.topicSections.isEmpty()
     }
 
     Column(
@@ -250,6 +251,23 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
                             sentenceCount = lp.totalItems,
                         ),
                     )
+                }
+            }
+        } else if (state.category == LessonCategory.TOPICS) {
+            val accent = c.accentFor(LessonCategory.TOPICS)
+            state.topicSections.forEach { section ->
+                item(key = "section-${section.title}", span = { GridItemSpan(2) }) {
+                    SectionHeader(section.title, section.subtitle)
+                }
+                items(section.groups, key = { it.groupLabel }) { group ->
+                    // Topics are always accessible; lock state is per-group from the topics chain.
+                    val groupUnlocked = state.wordGroupUnlocked[group.groupLabel] != false
+                    WordGroupCard(
+                        group = group,
+                        accent = accent,
+                        enabled = groupUnlocked,
+                        progress = state.wordGroupProgress[group.groupLabel] ?: 0f,
+                    ) { onSelect(PracticeSource.WordGroup(group)) }
                 }
             }
         } else {

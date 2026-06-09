@@ -44,6 +44,42 @@ fun difficultyLabel(difficulty: Int): String = when (difficulty) {
     else -> "Expert"
 }
 
+/** Display titles for the thematic Topics groups (mirrors scripts/insert-topics.sql). */
+private val topicTitleMap = mapOf(
+    "topic-01-greetings" to "Greetings & Expressions",
+    "topic-02-people" to "People & Family",
+    "topic-03-food" to "Food & Drink",
+    "topic-04-time" to "Time & Calendar",
+    "topic-05-places" to "Places & Buildings",
+    "topic-06-adjectives" to "Common Adjectives",
+    "topic-07-verbs" to "Everyday Verbs",
+    "topic-08-home" to "Home & Objects",
+    "topic-09-travel" to "Transport & Travel",
+    "topic-10-hobbies" to "Hobbies & Activities",
+    "topic-11-nature" to "Nature & Weather",
+    "topic-12-school" to "School & Study",
+)
+
+fun topicTitle(label: String): String = topicTitleMap[label]
+    ?: label.split("-").drop(2).joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
+
+/** Build the single "Topics" section from the topic-* word groups. */
+fun buildTopicSections(groups: List<ContentGroupItem>): List<WordGroupSection> {
+    if (groups.isEmpty()) return emptyList()
+    val infos = groups.sortedBy { it.groupLabel }.map { g ->
+        WordGroupInfo(
+            groupLabel = g.groupLabel,
+            title = topicTitle(g.groupLabel),
+            subtitle = "${g.itemCount} words",
+            contentType = ContentKind.WORD,
+            charset = null,
+            itemCount = g.itemCount,
+            difficulty = g.difficulty ?: 1,
+        )
+    }
+    return listOf(WordGroupSection("Topics", "Vocabulary grouped by theme", infos))
+}
+
 /**
  * Lesson unlock state — mirrors iOS exactly: trust the API's `isUnlocked` flag, with a local
  * fallback (`previous lesson at >= 80%`) so the UI feels snappy after a session even if the API

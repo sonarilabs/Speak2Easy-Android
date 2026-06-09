@@ -60,9 +60,9 @@ class LessonRepository(
     suspend fun getLessons(charset: String, forceRefresh: Boolean = false): LessonsResponse =
         cached(lessonsByCharset, charset, forceRefresh) { apiCall(json) { contentApi.getLessons(charset = charset) } }
 
-    suspend fun getContentGroups(contentType: String = "word", forceRefresh: Boolean = false): ContentGroupsResponse =
-        cached(contentGroupsByType, contentType, forceRefresh) {
-            apiCall(json) { contentApi.getContentGroups(contentType = contentType) }
+    suspend fun getContentGroups(contentType: String = "word", group: String? = null, forceRefresh: Boolean = false): ContentGroupsResponse =
+        cached(contentGroupsByType, "$contentType|${group ?: ""}", forceRefresh) {
+            apiCall(json) { contentApi.getContentGroups(contentType = contentType, group = group) }
         }
 
     suspend fun getLessonContent(

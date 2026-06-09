@@ -3,10 +3,13 @@ package com.sonari.speak2easy.ui.lessons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +39,7 @@ fun CategorySelector(selected: LessonCategory, onSelect: (LessonCategory) -> Uni
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(c.surfaceSecondary)
+            .horizontalScroll(rememberScrollState())
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -48,11 +52,10 @@ fun CategorySelector(selected: LessonCategory, onSelect: (LessonCategory) -> Uni
                 color = if (active) c.buttonText else c.textSecondary,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier
-                    .weight(1f)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (active) accent else Color.Transparent)
                     .clickable { onSelect(category) }
-                    .padding(vertical = 10.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
     }
@@ -83,6 +86,7 @@ fun LessonCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
             .background(c.cardBackground)
             .border(1.dp, c.border, RoundedCornerShape(12.dp))

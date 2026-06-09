@@ -66,4 +66,4 @@ fun AppRoot() {
 }
 
 private fun String?.hasPremiumAccess(): Boolean =
-    true // TODO: remove bypass before release
+    this != null && isNotBlank() && !equals("free", ignoreCase = true)

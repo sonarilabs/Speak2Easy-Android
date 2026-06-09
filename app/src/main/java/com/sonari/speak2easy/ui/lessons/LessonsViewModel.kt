@@ -31,6 +31,8 @@ data class LessonsUiState(
     val wordGroupProgress: Map<String, Float> = emptyMap(),
     // Sentences track: numbered lessons loaded straight from /lessons?charset=sentences.
     val sentenceLessons: List<LessonProgress> = emptyList(),
+    // Topics track: thematic vocab groups. Unlock/progress reuse wordGroup* maps above.
+    val topicSections: List<WordGroupSection> = emptyList(),
     val error: String? = null,
 )
 
@@ -74,6 +76,7 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
                     }
                     LessonCategory.WORDS -> loadWords()
                     LessonCategory.SENTENCES -> loadSentences()
+                    LessonCategory.TOPICS -> loadTopics()
                 }
                 loaded.add(category)
             } catch (e: Exception) {
@@ -120,6 +123,21 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
     private suspend fun loadSentences() {
         val resp = repo.getLessons("sentences")
         state = state.copy(sentenceLessons = resp.lessons)
+    }
+
+    /** Topics: thematic vocab groups with an independent unlock chain (per-group from /lessons?charset=topics). */
+    private suspend fun loadTopics() {
+        val groupsResp = repo.getContentGroups("word", group = "topics")
+        val lessonsResp = runCatching { repo.getLessons("topics") }.getOrNull()
+        val unlocked = lessonsResp?.wordGroups?.associate { it.groupLabel to it.isUnlocked }.orEmpty()
+        val progress = lessonsResp?.wordGroups
+            ?.associate { wg -> wg.groupLabel to (if (wg.totalItems > 0) wg.completedItems.toFloat() / wg.totalItems else 0f) }
+            .orEmpty()
+        state = state.copy(
+            topicSections = buildTopicSections(groupsResp.groups),
+            wordGroupUnlocked = state.wordGroupUnlocked + unlocked,
+            wordGroupProgress = state.wordGroupProgress + progress,
+        )
     }
 
     class Factory(private val repo: LessonRepository) : ViewModelProvider.Factory {

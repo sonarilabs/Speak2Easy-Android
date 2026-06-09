@@ -5,5 +5,6 @@ enum class LessonCategory(val displayName: String) {
     HIRAGANA("Hiragana"),
     KATAKANA("Katakana"),
     WORDS("Words"),
+    TOPICS("Topics"),
     SENTENCES("Sentences"),
 }
