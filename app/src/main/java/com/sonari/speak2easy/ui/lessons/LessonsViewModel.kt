@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.sonari.speak2easy.BuildConfig
 import com.sonari.speak2easy.data.lessons.LessonRepository
 import com.sonari.speak2easy.data.prefs.SonariPreferences
 import com.sonari.speak2easy.data.remote.dto.LessonProgress
@@ -42,6 +43,10 @@ data class LessonsUiState(
  * through because the local level/completion overrides were removed.
  */
 class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
+
+    // Debug-only (local USB testing): ignore the backend's per-lesson unlock chain
+    // so every lesson/group is reachable without grinding through prerequisites.
+    private val unlockAll = BuildConfig.DEBUG
 
     var state by mutableStateOf(LessonsUiState())
         private set
@@ -95,7 +100,8 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
         val resp = repo.getLessons(charset)
         val progress = resp.lessons.associate { it.progressKey to it.progress }
         val apiUnlocked = resp.lessons.associate { it.progressKey to it.isUnlocked }
-        apply(progress, computeUnlocked(groups, progress, apiUnlocked))
+        val unlocked = computeUnlocked(groups, progress, apiUnlocked)
+        apply(progress, if (unlockAll) unlocked.mapValues { true } else unlocked)
     }
 
     private suspend fun loadWords() {
@@ -113,8 +119,8 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
             .orEmpty()
         state = state.copy(
             wordSections = buildWordSections(groupsResp.groups),
-            wordsAccessible = lessonsResp?.categoryAccessible ?: true,
-            wordGroupUnlocked = perGroupUnlocked,
+            wordsAccessible = if (unlockAll) true else lessonsResp?.categoryAccessible ?: true,
+            wordGroupUnlocked = if (unlockAll) perGroupUnlocked.mapValues { true } else perGroupUnlocked,
             wordGroupProgress = perGroupProgress,
         )
     }
@@ -122,14 +128,17 @@ class LessonsViewModel(private val repo: LessonRepository) : ViewModel() {
     /** Sentences are charset-agnostic numbered lessons; the backend is the source of truth for unlock. */
     private suspend fun loadSentences() {
         val resp = repo.getLessons("sentences")
-        state = state.copy(sentenceLessons = resp.lessons)
+        val lessons = if (unlockAll) resp.lessons.map { it.copy(isUnlocked = true) } else resp.lessons
+        state = state.copy(sentenceLessons = lessons)
     }
 
     /** Topics: thematic vocab groups with an independent unlock chain (per-group from /lessons?charset=topics). */
     private suspend fun loadTopics() {
         val groupsResp = repo.getContentGroups("word", group = "topics")
         val lessonsResp = runCatching { repo.getLessons("topics") }.getOrNull()
-        val unlocked = lessonsResp?.wordGroups?.associate { it.groupLabel to it.isUnlocked }.orEmpty()
+        val unlocked = lessonsResp?.wordGroups
+            ?.associate { it.groupLabel to (if (unlockAll) true else it.isUnlocked) }
+            .orEmpty()
         val progress = lessonsResp?.wordGroups
             ?.associate { wg -> wg.groupLabel to (if (wg.totalItems > 0) wg.completedItems.toFloat() / wg.totalItems else 0f) }
             .orEmpty()

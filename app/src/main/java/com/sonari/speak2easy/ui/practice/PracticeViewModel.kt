@@ -231,9 +231,10 @@ class PracticeViewModel(
             state = state.copy(errorMessage = "Couldn't start recording.")
             return
         }
+        val limitMs = state.currentItem?.let(::recordLimitMs) ?: RECORD_MIN_MS
         state = state.copy(isRecording = true, errorMessage = null)
         recordJob = viewModelScope.launch {
-            delay(RECORD_LIMIT_MS)
+            delay(limitMs)
             if (state.isRecording) stopRecordingAndSubmit()
         }
     }
@@ -439,8 +440,20 @@ class PracticeViewModel(
             PracticeViewModel(plan, practiceRepo, lessonRepo, AudioRecorder(context), TtsPlayer(context), haptics) as T
     }
 
+    /**
+     * How long to keep the mic open before auto-submitting. A single kana takes a moment,
+     * but a full sentence needs far longer or the recorder cuts the speaker off mid-phrase,
+     * so scale with the prompt length (clamped to a sane min/max).
+     */
+    private fun recordLimitMs(item: PracticeItemUi): Long =
+        (RECORD_BASE_MS + RECORD_MS_PER_CHAR * item.character.length)
+            .coerceIn(RECORD_MIN_MS, RECORD_MAX_MS)
+
     private companion object {
-        const val RECORD_LIMIT_MS = 3_000L
+        const val RECORD_BASE_MS = 1_500L
+        const val RECORD_MS_PER_CHAR = 400L
+        const val RECORD_MIN_MS = 3_000L
+        const val RECORD_MAX_MS = 13_500L
         const val CORRECT_DELAY_MS = 1_500L
         const val INCORRECT_DELAY_MS = 2_500L
         const val AUTO_RECORD_DELAY_MS = 500L

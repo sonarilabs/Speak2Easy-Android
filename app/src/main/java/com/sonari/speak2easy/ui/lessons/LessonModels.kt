@@ -111,6 +111,7 @@ object SentenceCurriculum {
         16 to "Talking About the Past", 17 to "Asking Politely", 18 to "Reasons & Linking",
         19 to "Weather & Feelings", 20 to "Plans & Invitations", 21 to "Opinions", 22 to "Comparisons",
         23 to "Polite Requests", 24 to "Daily Life", 25 to "Travel",
+        26 to "Emergencies & Trouble",
     )
 
     fun titleFor(lessonNumber: Int): String = titles[lessonNumber] ?: "Lesson $lessonNumber"

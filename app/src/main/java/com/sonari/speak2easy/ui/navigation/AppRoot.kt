@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sonari.speak2easy.BuildConfig
 import com.sonari.speak2easy.data.auth.AuthState
 import com.sonari.speak2easy.di.LocalAppContainer
 import com.sonari.speak2easy.ui.onboarding.OnboardingRoot
@@ -34,6 +35,9 @@ fun AppRoot() {
         is AuthState.PendingVerification -> RootStage.ONBOARDING
         is AuthState.Authenticated -> when {
             !s.user.onboardingCompleted -> RootStage.ONBOARDING
+            // Debug builds (local USB testing) bypass the Google Play paywall, which
+            // can't load subscription products unless installed via a Play track.
+            BuildConfig.DEBUG -> RootStage.MAIN
             s.user.subscriptionTier.hasPremiumAccess() -> RootStage.MAIN
             else -> RootStage.PAYWALL
         }

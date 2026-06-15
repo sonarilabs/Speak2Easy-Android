@@ -149,6 +149,7 @@ fun WordGroupCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
             .background(c.cardBackground)
             .border(1.dp, c.border, RoundedCornerShape(12.dp))

@@ -8,12 +8,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +46,7 @@ import android.view.WindowManager
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,10 +67,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sonari.speak2easy.di.LocalAppContainer
+import com.sonari.speak2easy.model.LessonCategory
 import com.sonari.speak2easy.ui.components.Mascot
 import com.sonari.speak2easy.ui.components.MascotImage
+import com.sonari.speak2easy.ui.lessons.JapaneseScript
 import com.sonari.speak2easy.ui.lessons.PracticeOptions
 import com.sonari.speak2easy.ui.lessons.PracticeSource
+import com.sonari.speak2easy.ui.theme.LocalSonariColors
 import com.sonari.speak2easy.ui.theme.SonariFonts
 import com.sonari.speak2easy.ui.theme.SonariTheme
 
@@ -76,8 +82,6 @@ data class PracticePlan(val source: PracticeSource, val options: PracticeOptions
 
 @Composable
 fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
-    val c = SonariTheme.colors
-
     if (plan == null) {
         LaunchedEffect(Unit) { onExit() }
         return
@@ -128,6 +132,13 @@ fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
     // Single confirmation dialog reused by both the top EXIT entry and the bottom EXIT LESSON.
     var showExitConfirm by remember { mutableStateOf(false) }
 
+    // Tint the whole session with the lesson category's accent (Katakana = magenta,
+    // Words = indigo, Sentences = amber, Topics = rose) instead of the generic blue,
+    // by overriding the palette's `accent` for this subtree — every `c.accent` read
+    // below picks it up automatically.
+    val themed = SonariTheme.colors.let { it.copy(accent = it.accentFor(plan.source.category)) }
+    CompositionLocalProvider(LocalSonariColors provides themed) {
+    val c = SonariTheme.colors
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -202,7 +213,20 @@ fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
             containerColor = c.surfacePrimary,
         )
     }
+    }
 }
+
+/** The lesson category driving this session's accent color. */
+private val PracticeSource.category: LessonCategory
+    get() = when (this) {
+        is PracticeSource.Lesson -> when (characterSet) {
+            JapaneseScript.HIRAGANA -> LessonCategory.HIRAGANA
+            JapaneseScript.KATAKANA -> LessonCategory.KATAKANA
+        }
+        is PracticeSource.WordGroup ->
+            if (group.groupLabel.startsWith("topic-")) LessonCategory.TOPICS else LessonCategory.WORDS
+        is PracticeSource.SentenceLesson -> LessonCategory.SENTENCES
+    }
 
 /** Thin warning bar pinned to the top of Practice when there's no network. */
 @Composable
@@ -296,86 +320,97 @@ private fun ActiveContent(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
 
-        Spacer(Modifier.weight(1f))
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            // Auto-shrink so multi-char words like あたたかい fit on a single line.
-            Text(
-                item.character,
-                fontSize = characterFontSize(item.character),
-                fontWeight = FontWeight.Bold,
-                color = c.textPrimary,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false,
-            )
-            if (item.isWord && item.hiraganaReading != null && item.hiraganaReading != item.character) {
-                Text(item.hiraganaReading, style = SonariFonts.monoMedium, color = c.textSecondary, modifier = Modifier.padding(top = 6.dp))
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // Small speaker button sits between the character and the hints (matches iOS).
-            Box(
+        // The prompt (character + speaker + hints) takes the space above the pinned
+        // recording controls, vertically centered on normal phones. It scrolls when it
+        // can't fit — long sentences, or the Galaxy Z Flip cover display — so nothing is
+        // clipped. heightIn(min) keeps the column at least viewport-tall so Arrangement
+        // .Center still centers when there's room; past that the scroll takes over.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Column(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(c.surfacePrimary)
-                    .border(1.5.dp, c.accent, CircleShape)
-                    .clickable(enabled = !state.isSubmitting && (!state.isRecording || state.isHandsFree), onClick = onPlay),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = "Play pronunciation",
-                    tint = if (state.isPlaying) c.accent.copy(alpha = 0.6f) else c.accent,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-
-            if (showHint) {
-                Spacer(Modifier.height(20.dp))
-                Text("ROMAJI", style = SonariFonts.monoCaption, color = c.textSecondary)
+                // Auto-shrink the kana/word; long sentences wrap onto multiple lines
+                // (the scroll above handles anything taller than the viewport).
                 Text(
-                    item.romanization,
-                    style = SonariFonts.monoLarge,
-                    color = c.accent,
+                    item.character,
+                    fontSize = characterFontSize(item.character),
+                    fontWeight = FontWeight.Bold,
+                    color = c.textPrimary,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                if (item.isWord && item.hiraganaReading != null && item.hiraganaReading != item.character) {
+                    Text(item.hiraganaReading, style = SonariFonts.monoMedium, color = c.textSecondary, modifier = Modifier.padding(top = 6.dp))
+                }
 
-                if (item.isWord && item.englishTranslation != null) {
-                    Spacer(Modifier.height(16.dp))
-                    Text("MEANING", style = SonariFonts.monoCaption, color = c.textSecondary)
-                    Text(
-                        item.englishTranslation,
-                        style = SonariFonts.monoSmall,
-                        color = c.textPrimary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
-                    )
-                } else {
-                    Spacer(Modifier.height(16.dp))
-                    Text("PRONUNCIATION", style = SonariFonts.monoCaption, color = c.textSecondary)
-                    Text(
-                        item.guide,
-                        style = SonariFonts.monoSmall,
-                        color = c.textPrimary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
+                Spacer(Modifier.height(20.dp))
+
+                // Small speaker button sits between the character and the hints (matches iOS).
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(c.surfacePrimary)
+                        .border(1.5.dp, c.accent, CircleShape)
+                        .clickable(enabled = !state.isSubmitting && (!state.isRecording || state.isHandsFree), onClick = onPlay),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Play pronunciation",
+                        tint = if (state.isPlaying) c.accent.copy(alpha = 0.6f) else c.accent,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
-            } else {
-                Spacer(Modifier.height(16.dp))
-                TextButton(onClick = onRevealHint) {
-                    Text("SHOW HINT", style = SonariFonts.monoCaption, color = c.accent)
+
+                if (showHint) {
+                    Spacer(Modifier.height(20.dp))
+                    Text("ROMAJI", style = SonariFonts.monoCaption, color = c.textSecondary)
+                    Text(
+                        item.romanization,
+                        style = SonariFonts.monoLarge,
+                        color = c.accent,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
+                    )
+
+                    if (item.isWord && item.englishTranslation != null) {
+                        Spacer(Modifier.height(16.dp))
+                        Text("MEANING", style = SonariFonts.monoCaption, color = c.textSecondary)
+                        Text(
+                            item.englishTranslation,
+                            style = SonariFonts.monoSmall,
+                            color = c.textPrimary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
+                        )
+                    } else {
+                        Spacer(Modifier.height(16.dp))
+                        Text("PRONUNCIATION", style = SonariFonts.monoCaption, color = c.textSecondary)
+                        Text(
+                            item.guide,
+                            style = SonariFonts.monoSmall,
+                            color = c.textPrimary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.height(16.dp))
+                    TextButton(onClick = onRevealHint) {
+                        Text("SHOW HINT", style = SonariFonts.monoCaption, color = c.accent)
+                    }
                 }
             }
         }
 
-        Spacer(Modifier.weight(1f))
-
-        // TAP TO RECORD + mic button, centered.
+        // Recording controls pinned to the bottom (above the gesture-nav safe area).
+        Spacer(Modifier.height(24.dp))
         Text(
             if (state.isRecording) "RECORDING…" else "TAP TO RECORD",
             style = SonariFonts.monoCaption,
@@ -386,9 +421,7 @@ private fun ActiveContent(
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             RecordButton(state = state, onClick = onRecordToggle)
         }
-
-        // Drop the EXIT LESSON closer to the bottom of the safe area (above the gesture nav).
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(28.dp))
 
         // Box-based outline matches the rest of the app's button style (Welcome SIGN IN, etc.)
         // — Material 3's OutlinedButton has its own pill radius + border weight that looked off.
@@ -424,8 +457,11 @@ private fun characterFontSize(text: String): androidx.compose.ui.unit.TextUnit =
 @Composable
 private fun RecordButton(state: PracticeUiState, onClick: () -> Unit) {
     val c = SonariTheme.colors
+    // Grayed out while pronunciation is playing — recording is disabled until it finishes.
+    val disabled = state.isPlaying && !state.isRecording
     val bg = when {
         state.isRecording -> c.error
+        disabled -> c.surfaceSecondary
         else -> c.accent
     }
     Box(
@@ -433,13 +469,14 @@ private fun RecordButton(state: PracticeUiState, onClick: () -> Unit) {
             .size(84.dp)
             .clip(CircleShape)
             .background(bg)
-            .clickable(enabled = !state.isSubmitting, onClick = onClick),
+            .clickable(enabled = !state.isSubmitting && !disabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        val iconTint = if (disabled) c.textTertiary else c.buttonText
         when {
             state.isSubmitting -> CircularProgressIndicator(color = c.buttonText, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
             state.isRecording -> Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = c.buttonText, modifier = Modifier.size(34.dp))
-            else -> Icon(Icons.Filled.Mic, contentDescription = "Record", tint = c.buttonText, modifier = Modifier.size(34.dp))
+            else -> Icon(Icons.Filled.Mic, contentDescription = "Record", tint = iconTint, modifier = Modifier.size(34.dp))
         }
     }
 }
