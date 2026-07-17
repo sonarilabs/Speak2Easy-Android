@@ -2,7 +2,7 @@ package com.sonari.speak2easy.util
 
 /**
  * Tiny shared sanitizer for free-text inputs that ride to the backend (display name, city,
- * referral code, etc.). kotlinx.serialization already JSON-escapes everything, so this is
+ * etc.). kotlinx.serialization already JSON-escapes everything, so this is
  * about stripping characters the backend's email/HTML rendering layer doesn't want to see
  * (NULs, control chars, stray newlines) and enforcing per-field character classes.
  */

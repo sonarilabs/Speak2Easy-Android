@@ -208,6 +208,10 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
     ) {
         if (state.category == LessonCategory.WORDS) {
             val accent = c.accentFor(LessonCategory.WORDS)
+            // The very first lesson of the tab is always playable regardless of the
+            // user's selected level (beginner/intermediate/advanced) — it's the free
+            // sample, so it bypasses both the per-group and category-level gates.
+            val firstGroupLabel = state.wordSections.firstOrNull()?.groups?.firstOrNull()?.groupLabel
             state.wordSections.forEach { section ->
                 item(key = "section-${section.title}", span = { GridItemSpan(2) }) {
                     SectionHeader(section.title, section.subtitle)
@@ -218,16 +222,19 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
                     // Category-level gate (`wordsAccessible`) still overrides — if the user
                     // hasn't unlocked the Words category at all, every group is disabled.
                     val groupUnlocked = state.wordGroupUnlocked[group.groupLabel] != false
+                    val isFirst = group.groupLabel == firstGroupLabel
                     WordGroupCard(
                         group = group,
                         accent = accent,
-                        enabled = state.wordsAccessible && groupUnlocked,
+                        enabled = isFirst || (state.wordsAccessible && groupUnlocked),
                         progress = state.wordGroupProgress[group.groupLabel] ?: 0f,
                     ) { onSelect(PracticeSource.WordGroup(group)) }
                 }
             }
         } else if (state.category == LessonCategory.SENTENCES) {
             val accent = c.accentFor(LessonCategory.SENTENCES)
+            // First lesson always unlocked regardless of level (see Words note above).
+            val firstLessonNumber = state.sentenceLessons.minOfOrNull { it.lessonNumber }
             item(key = "section-sentences", span = { GridItemSpan(2) }) {
                 SectionHeader("Sentences", "Speak whole sentences — gradually getting harder")
             }
@@ -242,7 +249,7 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
                     ),
                     accent = accent,
                     progress = lp.progress,
-                    unlocked = lp.isUnlocked,
+                    unlocked = lp.isUnlocked || lp.lessonNumber == firstLessonNumber,
                 ) {
                     onSelect(
                         PracticeSource.SentenceLesson(
@@ -255,6 +262,8 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
             }
         } else if (state.category == LessonCategory.TOPICS) {
             val accent = c.accentFor(LessonCategory.TOPICS)
+            // First lesson always unlocked regardless of level (see Words note above).
+            val firstGroupLabel = state.topicSections.firstOrNull()?.groups?.firstOrNull()?.groupLabel
             state.topicSections.forEach { section ->
                 item(key = "section-${section.title}", span = { GridItemSpan(2) }) {
                     SectionHeader(section.title, section.subtitle)
@@ -265,7 +274,7 @@ private fun LessonsGrid(state: LessonsUiState, onSelect: (PracticeSource) -> Uni
                     WordGroupCard(
                         group = group,
                         accent = accent,
-                        enabled = groupUnlocked,
+                        enabled = groupUnlocked || group.groupLabel == firstGroupLabel,
                         progress = state.wordGroupProgress[group.groupLabel] ?: 0f,
                     ) { onSelect(PracticeSource.WordGroup(group)) }
                 }

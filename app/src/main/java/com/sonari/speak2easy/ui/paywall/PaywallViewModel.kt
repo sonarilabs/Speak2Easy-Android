@@ -36,6 +36,9 @@ data class PaywallUiState(
     val isPurchasing: Boolean = false,
     val isRestoring: Boolean = false,
     val purchaseAvailable: Boolean = false,
+    val promoCode: String = "",
+    val isApplyingPromo: Boolean = false,
+    val promoApplied: Boolean = false,
     val infoMessage: String? = null,
     val errorMessage: String? = null,
 ) {
@@ -53,6 +56,10 @@ class PaywallViewModel(
     private var productDetails: ProductDetails? = null
     private var offerToken: String? = null
     private var connecting = false
+
+    // Offer id unlocked by a validated promo code (developer-determined offer in Play
+    // Console). Null until the backend accepts a code; never selected for the public.
+    private var promoOfferId: String? = null
 
     private val _ui = MutableStateFlow(PaywallUiState())
     val ui: StateFlow<PaywallUiState> = _ui.asStateFlow()
@@ -81,6 +88,10 @@ class PaywallViewModel(
         }
     }
 
+    // Reconnection is handled manually (see scheduleReconnect) instead of
+    // enableAutoServiceReconnection: the library's internal reconnect races our own
+    // startConnection calls and fails with DEVELOPER_ERROR ("already connecting"),
+    // leaving the client permanently not-ready and the purchase button dead.
     private val billingClient = BillingClient.newBuilder(appContext)
         .setListener(purchasesUpdatedListener)
         .enablePendingPurchases(
@@ -88,8 +99,9 @@ class PaywallViewModel(
                 .enableOneTimeProducts()
                 .build(),
         )
-        .enableAutoServiceReconnection()
         .build()
+
+    private var reconnectAttempts = 0
 
     init {
         refreshStatus(silent = true)
@@ -105,14 +117,15 @@ class PaywallViewModel(
                     it.copy(
                         isLoadingStatus = false,
                         infoMessage = if (status.isActive) "Subscription active" else it.infoMessage,
-                        errorMessage = null,
                     )
                 }
             } catch (e: Exception) {
                 _ui.update {
                     it.copy(
                         isLoadingStatus = false,
-                        errorMessage = if (silent) null else (e.message ?: "Could not check subscription"),
+                        // Leave any billing error in place on silent refreshes; overwriting
+                        // it here hid the real failure reason from the paywall.
+                        errorMessage = if (silent) it.errorMessage else (e.message ?: "Could not check subscription"),
                     )
                 }
             }
@@ -158,6 +171,14 @@ class PaywallViewModel(
     fun restorePurchases() {
         _ui.update { it.copy(isRestoring = true, errorMessage = null, infoMessage = null) }
         refreshStatus(silent = true)
+        if (!billingClient.isReady) {
+            // Doubles as the user-visible retry path: a dead purchase button can't
+            // reconnect itself, but tapping Restore can.
+            connectBilling()
+            _ui.update { it.copy(isRestoring = false) }
+            return
+        }
+        queryProductDetails()
         queryExistingPurchases {
             _ui.update {
                 it.copy(
@@ -181,25 +202,40 @@ class PaywallViewModel(
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 connecting = false
                 if (billingResult.responseCode == BillingResponseCode.OK) {
+                    reconnectAttempts = 0
                     _ui.update { it.copy(isBillingReady = true, errorMessage = null) }
                     queryProductDetails()
                     queryExistingPurchases()
                 } else {
-                    _ui.update {
-                        it.copy(
-                            isBillingReady = false,
-                            purchaseAvailable = false,
-                            errorMessage = billingResult.debugMessage.ifBlank { "Billing is unavailable" },
-                        )
-                    }
+                    _ui.update { it.copy(isBillingReady = false, purchaseAvailable = false) }
+                    scheduleReconnect(billingResult.debugMessage.ifBlank { "Billing is unavailable" })
                 }
             }
 
             override fun onBillingServiceDisconnected() {
                 connecting = false
                 _ui.update { it.copy(isBillingReady = false) }
+                scheduleReconnect("Billing is unavailable")
             }
         })
+    }
+
+    /**
+     * Retries the billing connection with capped exponential backoff. The Play billing
+     * service disconnecting mid-session (common under aggressive OEM process management)
+     * previously left the paywall dead with no recovery path.
+     */
+    private fun scheduleReconnect(failureMessage: String) {
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            _ui.update { it.copy(errorMessage = failureMessage) }
+            return
+        }
+        val delayMs = (1000L shl reconnectAttempts).coerceAtMost(15_000L)
+        reconnectAttempts++
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            connectBilling()
+        }
     }
 
     private fun queryProductDetails() {
@@ -222,28 +258,78 @@ class PaywallViewModel(
                 return@queryProductDetailsAsync
             }
 
-            val details = result.productDetailsList.firstOrNull()
-            val offer = details?.subscriptionOfferDetails
-                ?.firstOrNull { offer ->
-                    offer.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L && it.billingPeriod == "P3D" }
+            productDetails = result.productDetailsList.firstOrNull()
+            applySelectedOffer()
+        }
+    }
+
+    /**
+     * Picks which offer the billing flow will use and syncs it into the UI state.
+     *
+     * Selection order:
+     *  1. The promo-unlocked (developer determined) offer, once a code has validated.
+     *  2. Any public offer with a free phase — trial length is controlled entirely
+     *     from Play Console, so changing it needs no app update.
+     *  3. The base plan.
+     * The promo offer is excluded from 2 and 3: Play returns developer-determined
+     * offers to every device, and gating them is this app's responsibility.
+     */
+    private fun applySelectedOffer() {
+        val details = productDetails
+        val offers = details?.subscriptionOfferDetails.orEmpty()
+        val offer = promoOfferId?.let { id -> offers.firstOrNull { it.offerId == id } }
+            ?: offers.firstOrNull { o -> o.offerId != PROMO_OFFER_ID && o.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L } }
+            ?: offers.firstOrNull { it.offerId != PROMO_OFFER_ID }
+
+        offerToken = offer?.offerToken
+
+        _ui.update {
+            it.copy(
+                productTitle = details?.title?.removeSuffix(" (Speak2Easy)") ?: it.productTitle,
+                priceLabel = details?.monthlyPriceLabel() ?: it.priceLabel,
+                trialLabel = offer?.trialLabel() ?: it.trialLabel,
+                purchaseAvailable = details != null && offer != null,
+                errorMessage = if (details == null || offer == null) {
+                    "Monthly subscription is not configured in Google Play yet."
+                } else {
+                    null
+                },
+            )
+        }
+    }
+
+    fun onPromoCodeChange(value: String) {
+        _ui.update { it.copy(promoCode = value.uppercase().take(20)) }
+    }
+
+    fun applyPromoCode() {
+        val code = _ui.value.promoCode.trim()
+        if (code.isEmpty() || _ui.value.isApplyingPromo || _ui.value.promoApplied) return
+
+        _ui.update { it.copy(isApplyingPromo = true, errorMessage = null, infoMessage = null) }
+        viewModelScope.launch {
+            try {
+                val response = subscriptionRepository.validatePromoCode(code)
+                promoOfferId = response.offerId
+                applySelectedOffer()
+                val unlocked = response.offerId != null &&
+                    productDetails?.subscriptionOfferDetails.orEmpty().any { it.offerId == response.offerId }
+                _ui.update {
+                    it.copy(
+                        isApplyingPromo = false,
+                        promoApplied = unlocked,
+                        infoMessage = if (unlocked) "Promo applied!" else it.infoMessage,
+                        errorMessage = if (unlocked) null else "Promo offer is not available right now.",
+                    )
                 }
-                ?: details?.subscriptionOfferDetails?.firstOrNull()
-
-            productDetails = details
-            offerToken = offer?.offerToken
-
-            _ui.update {
-                it.copy(
-                    productTitle = details?.title?.removeSuffix(" (Speak2Easy)") ?: it.productTitle,
-                    priceLabel = details?.monthlyPriceLabel() ?: it.priceLabel,
-                    trialLabel = offer?.trialLabel() ?: it.trialLabel,
-                    purchaseAvailable = details != null && offer != null,
-                    errorMessage = if (details == null || offer == null) {
-                        "Monthly subscription is not configured in Google Play yet."
-                    } else {
-                        null
-                    },
-                )
+            } catch (e: ApiException) {
+                _ui.update {
+                    it.copy(isApplyingPromo = false, errorMessage = e.message ?: "Invalid promo code")
+                }
+            } catch (e: Exception) {
+                _ui.update {
+                    it.copy(isApplyingPromo = false, errorMessage = "Could not check promo code. Try again.")
+                }
             }
         }
     }
@@ -385,6 +471,11 @@ class PaywallViewModel(
 
     companion object {
         const val PREMIUM_MONTHLY_PRODUCT_ID = "speak2easy_premium_monthly"
+        private const val MAX_RECONNECT_ATTEMPTS = 6
+
+        // Developer-determined offer in Play Console; must match the backend's
+        // PROMO_UNLOCKED_OFFER_ID so unvalidated users never see it.
+        private const val PROMO_OFFER_ID = "free-trial-1month"
     }
 }
 
@@ -402,7 +493,8 @@ private fun ProductDetails.SubscriptionOfferDetails.trialLabel(): String {
     return when (freeTrial?.billingPeriod) {
         "P3D" -> "3 Days Free Trial"
         "P7D" -> "7 Days Free Trial"
+        "P2W" -> "2 Weeks Free Trial"
         "P1M" -> "1 Month Free Trial"
-        else -> "3 Days Free Trial"
+        else -> "1 Month Free Trial"
     }
 }

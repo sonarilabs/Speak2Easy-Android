@@ -12,6 +12,17 @@ data class SubscriptionStatusResponse(
 )
 
 @Serializable
+data class PromoValidateRequest(
+    val code: String,
+)
+
+@Serializable
+data class PromoValidateResponse(
+    val valid: Boolean = false,
+    val offerId: String? = null,
+)
+
+@Serializable
 data class GoogleSubscriptionVerifyRequest(
     val productId: String,
     val purchaseToken: String,

@@ -3,8 +3,6 @@ package com.sonari.speak2easy.ui.lessons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +17,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,28 +34,36 @@ import com.sonari.speak2easy.ui.theme.SonariTheme
 @Composable
 fun CategorySelector(selected: LessonCategory, onSelect: (LessonCategory) -> Unit) {
     val c = SonariTheme.colors
+    // All tracks share the bar width evenly so every category — including the last
+    // one (Sentences) — is visible at once instead of scrolling off the edge.
+    // Labels auto-shrink to fit their cell so longer names never clip.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(c.surfaceSecondary)
-            .horizontalScroll(rememberScrollState())
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         LessonCategory.entries.forEach { category ->
             val active = category == selected
             val accent = c.accentFor(category)
-            Text(
+            // BasicText (not Material Text) because only it supports autoSize.
+            BasicText(
                 text = category.displayName.uppercase(),
-                style = SonariFonts.monoCaption,
-                color = if (active) c.buttonText else c.textSecondary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                style = SonariFonts.monoCaption.copy(
+                    color = if (active) c.buttonText else c.textSecondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                ),
+                maxLines = 1,
+                softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp),
                 modifier = Modifier
+                    .weight(1f)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (active) accent else Color.Transparent)
                     .clickable { onSelect(category) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 4.dp, vertical = 10.dp),
             )
         }
     }

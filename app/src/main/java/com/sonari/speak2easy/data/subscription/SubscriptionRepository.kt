@@ -4,6 +4,8 @@ import com.sonari.speak2easy.data.auth.AuthRepository
 import com.sonari.speak2easy.data.remote.SubscriptionApi
 import com.sonari.speak2easy.data.remote.apiCall
 import com.sonari.speak2easy.data.remote.dto.GoogleSubscriptionVerifyRequest
+import com.sonari.speak2easy.data.remote.dto.PromoValidateRequest
+import com.sonari.speak2easy.data.remote.dto.PromoValidateResponse
 import com.sonari.speak2easy.data.remote.dto.SubscriptionStatusResponse
 import kotlinx.serialization.json.Json
 
@@ -37,4 +39,7 @@ class SubscriptionRepository(
         authRepository.updateSubscriptionTier(status.subscriptionTier.takeIf { status.isActive })
         return status
     }
+
+    suspend fun validatePromoCode(code: String): PromoValidateResponse =
+        apiCall(json) { api.validatePromo(PromoValidateRequest(code = code)) }
 }

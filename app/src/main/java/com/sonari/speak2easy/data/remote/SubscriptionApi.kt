@@ -1,6 +1,8 @@
 package com.sonari.speak2easy.data.remote
 
 import com.sonari.speak2easy.data.remote.dto.GoogleSubscriptionVerifyRequest
+import com.sonari.speak2easy.data.remote.dto.PromoValidateRequest
+import com.sonari.speak2easy.data.remote.dto.PromoValidateResponse
 import com.sonari.speak2easy.data.remote.dto.SubscriptionStatusResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -12,4 +14,7 @@ interface SubscriptionApi {
 
     @POST("subscriptions/verify-google")
     suspend fun verifyGoogle(@Body request: GoogleSubscriptionVerifyRequest): SubscriptionStatusResponse
+
+    @POST("subscriptions/validate-promo")
+    suspend fun validatePromo(@Body request: PromoValidateRequest): PromoValidateResponse
 }

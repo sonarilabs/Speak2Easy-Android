@@ -24,8 +24,8 @@ android {
         applicationId = "com.sonari.speak2easy"
         minSdk = 30
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.5"
+        versionCode = 9
+        versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -49,6 +49,11 @@ android {
             // and strings the optimizer can prove are unreachable.
             isMinifyEnabled = true
             isShrinkResources = true
+            // Bundle native debug symbols (from dependency .so files) so Play can
+            // symbolicate native crashes/ANRs — clears the "no debug symbols" upload warning.
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

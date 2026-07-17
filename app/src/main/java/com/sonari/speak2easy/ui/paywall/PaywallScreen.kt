@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonari.speak2easy.R
+import com.sonari.speak2easy.ui.onboarding.SonariTextField
 import com.sonari.speak2easy.ui.theme.SonariFonts
 import com.sonari.speak2easy.ui.theme.SonariTheme
 
@@ -163,6 +164,42 @@ fun PaywallScreen(viewModel: PaywallViewModel) {
                 color = c.textSecondary,
                 textAlign = TextAlign.Center,
             )
+        }
+
+        if (!ui.promoApplied) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SonariTextField(
+                    value = ui.promoCode,
+                    onValueChange = viewModel::onPromoCodeChange,
+                    label = "Promo code",
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.size(10.dp))
+                val applyEnabled = ui.promoCode.isNotBlank() && !ui.isApplyingPromo
+                Box(
+                    modifier = Modifier
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (applyEnabled) c.accent else c.surfaceSecondary)
+                        .clickable(enabled = applyEnabled) { viewModel.applyPromoCode() }
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (ui.isApplyingPromo) {
+                        CircularProgressIndicator(color = c.buttonText, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    } else {
+                        Text(
+                            "APPLY",
+                            style = SonariFonts.monoCaption,
+                            color = if (applyEnabled) c.buttonText else c.textTertiary,
+                        )
+                    }
+                }
+            }
         }
 
         ui.infoMessage?.let {

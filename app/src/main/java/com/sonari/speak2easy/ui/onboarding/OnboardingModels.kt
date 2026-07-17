@@ -324,7 +324,6 @@ data class OnboardingForm(
     val learningGoal: LearningGoal = LearningGoal.TRAVEL,
     val dailyGoalMinutes: Int = 10,
     val preferredPracticeTime: PracticeTime = PracticeTime.FLEXIBLE,
-    val referralCode: String = "",
 ) {
     val isPersonalInfoComplete: Boolean
         get() {
@@ -360,6 +359,5 @@ data class OnboardingForm(
         dailyReminderTime = preferredPracticeTime.reminderTime,
         city = city?.takeIf { it.isNotBlank() },
         state = state?.takeIf { it.isNotBlank() },
-        referredByCode = referralCode.trim().uppercase().ifEmpty { null },
     )
 }

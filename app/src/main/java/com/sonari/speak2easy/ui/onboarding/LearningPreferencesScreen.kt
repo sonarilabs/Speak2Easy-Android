@@ -42,7 +42,6 @@ import androidx.core.content.ContextCompat
 import com.sonari.speak2easy.di.LocalAppContainer
 import com.sonari.speak2easy.ui.theme.SonariFonts
 import com.sonari.speak2easy.ui.theme.SonariTheme
-import com.sonari.speak2easy.util.TextSanitizer
 import kotlinx.coroutines.launch
 
 @Composable
@@ -85,12 +84,6 @@ fun LearningPreferencesScreen(viewModel: OnboardingViewModel, onBack: () -> Unit
             SonariPrimaryButton("FINISH", loading = viewModel.isSubmitting, onClick = viewModel::submit)
         },
     ) {
-        // Referral code lives on step 2 (matches iOS layout). Sanitizer caps at 20 chars and
-        // upper-cases on each keystroke; backend additionally validates against /^[A-Z0-9]{3,20}$/.
-        SonariTextField(form.referralCode, { v ->
-            viewModel.update { it.copy(referralCode = TextSanitizer.cleanFreeText(v, 20).uppercase()) }
-        }, "Referral code (optional)")
-
         LabeledDropdown("Japanese level", JapaneseLevel.entries.toList(), form.japaneseLevel, { it.display }) { v ->
             viewModel.update { it.copy(japaneseLevel = v) }
         }

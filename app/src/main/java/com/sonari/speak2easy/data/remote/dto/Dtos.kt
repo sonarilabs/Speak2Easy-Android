@@ -86,5 +86,4 @@ data class OnboardingRequest(
     val city: String? = null,
     val state: String? = null,
     val learningGoalDetails: String? = null,
-    val referredByCode: String? = null,
 )
