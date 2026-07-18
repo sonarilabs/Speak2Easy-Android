@@ -35,9 +35,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +53,8 @@ import com.sonari.speak2easy.R
 import com.sonari.speak2easy.ui.onboarding.SonariTextField
 import com.sonari.speak2easy.ui.theme.SonariFonts
 import com.sonari.speak2easy.ui.theme.SonariTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun PaywallScreen(viewModel: PaywallViewModel) {
@@ -58,6 +62,8 @@ fun PaywallScreen(viewModel: PaywallViewModel) {
     val c = SonariTheme.colors
     val context = LocalContext.current
     val activity = context.findActivity()
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -65,7 +71,7 @@ fun PaywallScreen(viewModel: PaywallViewModel) {
             .background(c.background)
             .systemBarsPadding()
             .imePadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -176,7 +182,18 @@ fun PaywallScreen(viewModel: PaywallViewModel) {
                     value = ui.promoCode,
                     onValueChange = viewModel::onPromoCodeChange,
                     label = "Promo code",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { state ->
+                            if (state.isFocused) {
+                                scope.launch {
+                                    // Let the keyboard animate in (imePadding grows the
+                                    // scroll range) before scrolling the field into view.
+                                    delay(300)
+                                    scrollState.animateScrollTo(scrollState.maxValue)
+                                }
+                            }
+                        },
                 )
                 Spacer(Modifier.size(10.dp))
                 val applyEnabled = ui.promoCode.isNotBlank() && !ui.isApplyingPromo
