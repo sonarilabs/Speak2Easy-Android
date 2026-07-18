@@ -16,7 +16,18 @@ class TokenStore(context: Context, private val json: Json) {
     private val prefs = context.applicationContext
         .getSharedPreferences("sonari_auth", Context.MODE_PRIVATE)
 
-    fun getToken(): String? = prefs.getString(KEY_TOKEN, null)
+    fun getToken(): String? {
+        val raw = prefs.getString(KEY_TOKEN, null) ?: return null
+        val token = normalizeAccessToken(raw)
+        if (token == null) {
+            prefs.edit().remove(KEY_TOKEN).apply()
+            return null
+        }
+        if (token != raw) {
+            prefs.edit().putString(KEY_TOKEN, token).apply()
+        }
+        return token
+    }
 
     fun getRefreshToken(): String? = prefs.getString(KEY_REFRESH, null)
 
@@ -30,8 +41,10 @@ class TokenStore(context: Context, private val json: Json) {
     }
 
     fun saveSession(token: String, user: User, refreshToken: String? = null) {
+        val accessToken = normalizeAccessToken(token)
+            ?: throw IllegalArgumentException("Access token is not a valid JWT")
         val editor = prefs.edit()
-            .putString(KEY_TOKEN, token)
+            .putString(KEY_TOKEN, accessToken)
             .putString(KEY_USER, json.encodeToString(User.serializer(), user))
         if (refreshToken != null) {
             editor.putString(KEY_REFRESH, refreshToken)
@@ -40,7 +53,9 @@ class TokenStore(context: Context, private val json: Json) {
     }
 
     fun saveAccessToken(token: String) {
-        prefs.edit().putString(KEY_TOKEN, token).apply()
+        val accessToken = normalizeAccessToken(token)
+            ?: throw IllegalArgumentException("Access token is not a valid JWT")
+        prefs.edit().putString(KEY_TOKEN, accessToken).apply()
     }
 
     fun saveRefreshToken(refreshToken: String) {
@@ -56,4 +71,10 @@ class TokenStore(context: Context, private val json: Json) {
         const val KEY_REFRESH = "sonari_refresh_token"
         const val KEY_USER = "sonari_current_user"
     }
+}
+
+internal fun normalizeAccessToken(raw: String?): String? {
+    val trimmed = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val token = trimmed.replace(Regex("^Bearer\\s+", RegexOption.IGNORE_CASE), "").trim()
+    return token.takeIf { it.count { ch -> ch == '.' } == 2 && it.split('.').all(String::isNotBlank) }
 }

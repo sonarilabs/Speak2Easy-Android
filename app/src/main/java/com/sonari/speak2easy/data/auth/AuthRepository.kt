@@ -58,13 +58,16 @@ class AuthRepository(
         }
 
     suspend fun restoreSession() {
-        val token = tokenStore.getToken()
-        if (token == null) {
+        val cached = tokenStore.getCachedUser()
+        if (cached == null) {
+            tokenStore.clear()
             _authState.value = AuthState.Unauthenticated
             return
         }
-        val cached = tokenStore.getCachedUser()
-        if (cached == null) {
+
+        val token = tokenStore.getToken()
+        if (token == null) {
+            if (tryRefreshAccessToken(cached)) return
             tokenStore.clear()
             _authState.value = AuthState.Unauthenticated
             return
@@ -94,7 +97,8 @@ class AuthRepository(
         val refreshToken = tokenStore.getRefreshToken() ?: return false
         return try {
             val resp = apiCall(json) { authApi.refreshToken(RefreshTokenRequest(refreshToken = refreshToken)) }
-            val newAccess = resp.accessToken ?: resp.token
+            val newAccess = normalizeAccessToken(resp.accessToken ?: resp.token)
+                ?: throw IllegalArgumentException("Refresh returned invalid access token")
             tokenStore.saveAccessToken(newAccess)
             resp.refreshToken?.let(tokenStore::saveRefreshToken)
             val fresh = try {

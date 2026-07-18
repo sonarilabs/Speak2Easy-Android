@@ -2,6 +2,7 @@ package com.sonari.speak2easy.data.remote
 
 import android.util.Log
 import com.sonari.speak2easy.data.auth.TokenStore
+import com.sonari.speak2easy.data.auth.normalizeAccessToken
 import com.sonari.speak2easy.data.remote.dto.RefreshTokenRequest
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -37,7 +38,7 @@ class TokenAuthenticator(
         if (response.request.url.encodedPath.contains("/auth/token/refresh")) return null
 
         val staleAuth = response.request.header("Authorization") ?: return null
-        val staleToken = staleAuth.removePrefix("Bearer ").trim().ifEmpty { return null }
+        val staleToken = normalizeAccessToken(staleAuth) ?: return null
 
         return runBlocking {
             mutex.withLock {
@@ -50,12 +51,14 @@ class TokenAuthenticator(
                 val refreshToken = tokenStore.getRefreshToken()
                 if (refreshToken.isNullOrEmpty()) {
                     Log.w(TAG, "401 with no refresh token — giving up")
+                    onRefreshFailed()
                     return@withLock null
                 }
 
                 val newToken = try {
                     val resp = authApi().refreshToken(RefreshTokenRequest(refreshToken = refreshToken))
-                    val access = resp.accessToken ?: resp.token
+                    val access = normalizeAccessToken(resp.accessToken ?: resp.token)
+                        ?: throw IllegalArgumentException("Refresh returned invalid access token")
                     tokenStore.saveAccessToken(access)
                     resp.refreshToken?.let(tokenStore::saveRefreshToken)
                     Log.d(TAG, "Refreshed access token after 401")

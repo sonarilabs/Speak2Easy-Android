@@ -2,6 +2,7 @@ package com.sonari.speak2easy.ui.paywall
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -55,6 +56,8 @@ class PaywallViewModel(
     private val processedTokens = mutableSetOf<String>()
     private var productDetails: ProductDetails? = null
     private var offerToken: String? = null
+    private var selectedOfferId: String? = null
+    private var selectedOfferHasOneMonthTrial = false
     private var connecting = false
 
     // Offer id unlocked by a validated promo code (developer-determined offer in Play
@@ -238,7 +241,7 @@ class PaywallViewModel(
         }
     }
 
-    private fun queryProductDetails() {
+    private fun queryProductDetails(onLoaded: (() -> Unit)? = null) {
         val product = QueryProductDetailsParams.Product.newBuilder()
             .setProductId(PREMIUM_MONTHLY_PRODUCT_ID)
             .setProductType(BillingClient.ProductType.SUBS)
@@ -255,11 +258,14 @@ class PaywallViewModel(
                         errorMessage = billingResult.debugMessage.ifBlank { "Could not load subscription" },
                     )
                 }
+                onLoaded?.invoke()
                 return@queryProductDetailsAsync
             }
 
             productDetails = result.productDetailsList.firstOrNull()
+            logProductDetails(productDetails)
             applySelectedOffer()
+            onLoaded?.invoke()
         }
     }
 
@@ -277,11 +283,24 @@ class PaywallViewModel(
     private fun applySelectedOffer() {
         val details = productDetails
         val offers = details?.subscriptionOfferDetails.orEmpty()
-        val offer = promoOfferId?.let { id -> offers.firstOrNull { it.offerId == id } }
+        val oneMonthTrialOffers = offers.filter { it.hasOneMonthFreeTrial() }
+        val offer = promoOfferId?.let { id ->
+            offers.firstOrNull { it.offerId == id }
+                ?: oneMonthTrialOffers.singleOrNull()
+        }
             ?: offers.firstOrNull { o -> o.offerId != PROMO_OFFER_ID && o.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L } }
             ?: offers.firstOrNull { it.offerId != PROMO_OFFER_ID }
 
         offerToken = offer?.offerToken
+        selectedOfferId = offer?.offerId
+        selectedOfferHasOneMonthTrial = offer?.hasOneMonthFreeTrial() == true
+        if (promoOfferId != null && offer?.offerId != promoOfferId) {
+            Log.w(
+                TAG,
+                "Promo offer id not matched exactly. requestedOfferId=$promoOfferId " +
+                    "selectedOfferId=${offer?.offerId} availableOfferIds=${offers.map { it.offerId }}",
+            )
+        }
 
         _ui.update {
             it.copy(
@@ -311,16 +330,14 @@ class PaywallViewModel(
             try {
                 val response = subscriptionRepository.validatePromoCode(code)
                 promoOfferId = response.offerId
-                applySelectedOffer()
-                val unlocked = response.offerId != null &&
-                    productDetails?.subscriptionOfferDetails.orEmpty().any { it.offerId == response.offerId }
-                _ui.update {
-                    it.copy(
-                        isApplyingPromo = false,
-                        promoApplied = unlocked,
-                        infoMessage = if (unlocked) "Promo applied!" else it.infoMessage,
-                        errorMessage = if (unlocked) null else "Promo offer is not available right now.",
-                    )
+                if (billingClient.isReady) {
+                    queryProductDetails {
+                        finishPromoApply(response.offerId)
+                    }
+                } else {
+                    connectBilling()
+                    applySelectedOffer()
+                    finishPromoApply(response.offerId)
                 }
             } catch (e: ApiException) {
                 _ui.update {
@@ -331,6 +348,24 @@ class PaywallViewModel(
                     it.copy(isApplyingPromo = false, errorMessage = "Could not check promo code. Try again.")
                 }
             }
+        }
+    }
+
+    private fun finishPromoApply(offerId: String?) {
+        val unlocked = offerId != null &&
+            offerToken != null &&
+            (selectedOfferId == offerId || selectedOfferHasOneMonthTrial)
+        _ui.update {
+            it.copy(
+                isApplyingPromo = false,
+                promoApplied = unlocked,
+                infoMessage = if (unlocked) "Promo applied!" else it.infoMessage,
+                errorMessage = if (unlocked) {
+                    null
+                } else {
+                    "Promo code is valid, but the Google Play offer is not available on this device yet."
+                },
+            )
         }
     }
 
@@ -470,6 +505,7 @@ class PaywallViewModel(
     }
 
     companion object {
+        private const val TAG = "PaywallViewModel"
         const val PREMIUM_MONTHLY_PRODUCT_ID = "speak2easy_premium_monthly"
         private const val MAX_RECONNECT_ATTEMPTS = 6
 
@@ -477,6 +513,19 @@ class PaywallViewModel(
         // PROMO_UNLOCKED_OFFER_ID so unvalidated users never see it.
         private const val PROMO_OFFER_ID = "free-trial-1month"
     }
+}
+
+private fun logProductDetails(details: ProductDetails?) {
+    if (details == null) {
+        Log.w("PaywallViewModel", "Billing product not returned for speak2easy_premium_monthly")
+        return
+    }
+    val offers = details.subscriptionOfferDetails.orEmpty()
+    Log.i(
+        "PaywallViewModel",
+        "Billing product loaded. productId=${details.productId} offerCount=${offers.size} " +
+            "offers=${offers.map { offer -> "${offer.basePlanId}:${offer.offerId}:${offer.offerTags}" }}",
+    )
 }
 
 private fun ProductDetails.monthlyPriceLabel(): String {
@@ -498,3 +547,6 @@ private fun ProductDetails.SubscriptionOfferDetails.trialLabel(): String {
         else -> "1 Month Free Trial"
     }
 }
+
+private fun ProductDetails.SubscriptionOfferDetails.hasOneMonthFreeTrial(): Boolean =
+    pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L && it.billingPeriod == "P1M" }
