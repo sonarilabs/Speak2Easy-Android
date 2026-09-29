@@ -1,10 +1,16 @@
 package com.sonari.speak2easy.data.practice
 
+import com.sonari.speak2easy.BuildConfig
+import com.sonari.speak2easy.data.remote.ApiException
 import com.sonari.speak2easy.data.remote.PracticeApi
 import com.sonari.speak2easy.data.remote.UserApi
 import com.sonari.speak2easy.data.remote.apiCall
+import com.sonari.speak2easy.data.remote.dto.AttemptRatingRequest
+import com.sonari.speak2easy.data.remote.dto.FeedbackRating
 import com.sonari.speak2easy.data.remote.dto.PracticeSessionSummary
 import com.sonari.speak2easy.data.remote.dto.SessionAttemptsResponse
+import com.sonari.speak2easy.data.remote.dto.SessionFeedback
+import com.sonari.speak2easy.data.remote.dto.SessionFeedbackRequest
 import com.sonari.speak2easy.data.remote.dto.UserProgressResponse
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -56,6 +62,44 @@ class ProgressRepository(
         }
     }
 
+    /** "Was this feedback helpful?" for one attempt. Returns the rating as saved. */
+    suspend fun rateAttempt(
+        sessionId: String,
+        attemptId: String,
+        isHelpful: Boolean,
+        reason: String? = null,
+        comment: String? = null,
+    ): FeedbackRating {
+        val request = AttemptRatingRequest(isHelpful, reason, comment, PLATFORM, BuildConfig.VERSION_NAME)
+        val saved = apiCall(json) { practiceApi.rateAttempt(attemptId, request) }.rating
+        updateCachedRating(sessionId, attemptId, saved)
+        return saved
+    }
+
+    /** Withdraws a rating (tapping the selected thumb again). */
+    suspend fun clearRating(sessionId: String, attemptId: String) {
+        val response = apiCall(json) { practiceApi.clearAttemptRating(attemptId) }
+        if (!response.isSuccessful) throw ApiException(response.code(), "Couldn't clear the rating")
+        updateCachedRating(sessionId, attemptId, null)
+    }
+
+    suspend fun submitSessionFeedback(sessionId: String, comment: String): SessionFeedback {
+        val request = SessionFeedbackRequest(comment, PLATFORM, BuildConfig.VERSION_NAME)
+        val saved = apiCall(json) { practiceApi.submitSessionFeedback(sessionId, request) }.sessionFeedback
+        lock.withLock {
+            cachedAttempts[sessionId]?.let { cachedAttempts[sessionId] = it.copy(sessionFeedback = saved) }
+        }
+        return saved
+    }
+
+    /** Keeps the cached attempts in step so revisiting a session shows the latest vote. */
+    private suspend fun updateCachedRating(sessionId: String, attemptId: String, rating: FeedbackRating?) = lock.withLock {
+        val cached = cachedAttempts[sessionId] ?: return@withLock
+        cachedAttempts[sessionId] = cached.copy(
+            attempts = cached.attempts.map { if (it.attemptId == attemptId) it.copy(rating = rating) else it },
+        )
+    }
+
     /** Called when practice activity changes user-visible progress. */
     suspend fun invalidateUserProgress() = lock.withLock {
         cachedProgress = null
@@ -77,5 +121,6 @@ class ProgressRepository(
         // 30 seconds is long enough to coalesce tab-switch fetches but short enough that
         // a return-from-background sees current-ish numbers.
         const val TTL_MS = 30_000L
+        const val PLATFORM = "android"
     }
 }

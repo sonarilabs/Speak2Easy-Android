@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -182,7 +183,7 @@ fun PracticeScreen(plan: PracticePlan?, onExit: () -> Unit) {
                 }
 
                 if (state.showResult && state.lastResult != null) {
-                    ResultOverlay(state.lastResult!!)
+                    ResultOverlay(state.lastResult!!, onDismiss = viewModel::dismissResult)
                 }
             }
         }
@@ -482,13 +483,18 @@ private fun RecordButton(state: PracticeUiState, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ResultOverlay(result: PracticeResultUi) {
+private fun ResultOverlay(result: PracticeResultUi, onDismiss: () -> Unit) {
     val c = SonariTheme.colors
     val accent = if (result.isCorrect) c.success else c.error
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(c.background.copy(alpha = 0.85f)),
+            .background(c.background.copy(alpha = 0.85f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
@@ -502,6 +508,9 @@ private fun ResultOverlay(result: PracticeResultUi) {
             val detail = result.feedback ?: result.transcribed?.let { "Heard: $it" }
             if (detail != null) {
                 Text(detail, style = SonariFonts.monoSmall, color = c.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp))
+            }
+            if (!result.isCorrect) {
+                Text("TAP TO CONTINUE", style = SonariFonts.monoTiny, color = c.textTertiary, modifier = Modifier.padding(top = 16.dp))
             }
         }
     }

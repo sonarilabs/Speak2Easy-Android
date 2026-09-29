@@ -1,15 +1,20 @@
 package com.sonari.speak2easy.data.remote
 
+import com.sonari.speak2easy.data.remote.dto.AttemptRatingRequest
+import com.sonari.speak2easy.data.remote.dto.AttemptRatingResponse
 import com.sonari.speak2easy.data.remote.dto.CompleteSessionRequest
 import com.sonari.speak2easy.data.remote.dto.PracticeAttemptResponse
 import com.sonari.speak2easy.data.remote.dto.PracticeSessionResponse
 import com.sonari.speak2easy.data.remote.dto.PracticeSessionSummary
 import com.sonari.speak2easy.data.remote.dto.SessionAttemptsResponse
+import com.sonari.speak2easy.data.remote.dto.SessionFeedbackRequest
+import com.sonari.speak2easy.data.remote.dto.SessionFeedbackResponse
 import com.sonari.speak2easy.data.remote.dto.StartSessionRequest
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
 import retrofit2.http.POST
@@ -44,4 +49,19 @@ interface PracticeApi {
 
     @GET("practice/session/{sessionId}/attempts")
     suspend fun getSessionAttempts(@Path("sessionId") sessionId: String): SessionAttemptsResponse
+
+    @PUT("practice/attempts/{attemptId}/rating")
+    suspend fun rateAttempt(
+        @Path("attemptId") attemptId: String,
+        @Body request: AttemptRatingRequest,
+    ): AttemptRatingResponse
+
+    @DELETE("practice/attempts/{attemptId}/rating")
+    suspend fun clearAttemptRating(@Path("attemptId") attemptId: String): Response<Unit>
+
+    @PUT("practice/session/{sessionId}/feedback")
+    suspend fun submitSessionFeedback(
+        @Path("sessionId") sessionId: String,
+        @Body request: SessionFeedbackRequest,
+    ): SessionFeedbackResponse
 }

@@ -276,17 +276,36 @@ class PracticeViewModel(
             lastResult = PracticeResultUi(isCorrect, transcribed, feedback),
         )
         advanceJob = viewModelScope.launch {
-            delay(if (isCorrect) CORRECT_DELAY_MS else INCORRECT_DELAY_MS)
-            state = state.copy(showResult = false, lastResult = null)
-            if (handsFreePaused) return@launch
-            if (isCorrect) {
-                advance()
-            } else {
-                // Don't advance on incorrect — stay on this item so the user can retry.
-                // In hands-free, replay the prompt + auto-record; otherwise wait for the user.
-                maybeAutoStart()
-            }
+            delay(resultDisplayMs(isCorrect, feedback))
+            finishResult(isCorrect)
         }
+    }
+
+    /** Tapping the result overlay skips the rest of the wait. */
+    fun dismissResult() {
+        val result = state.lastResult ?: return
+        if (!state.showResult) return
+        advanceJob?.cancel()
+        finishResult(result.isCorrect)
+    }
+
+    private fun finishResult(isCorrect: Boolean) {
+        state = state.copy(showResult = false, lastResult = null)
+        if (handsFreePaused) return
+        if (isCorrect) {
+            advance()
+        } else {
+            // Don't advance on incorrect — stay on this item so the user can retry.
+            // In hands-free, replay the prompt + auto-record; otherwise wait for the user.
+            maybeAutoStart()
+        }
+    }
+
+    /** Long enough to read the personalised feedback, capped so practice keeps moving. */
+    private fun resultDisplayMs(isCorrect: Boolean, feedback: String?): Long {
+        val base = if (isCorrect) CORRECT_DELAY_MS else INCORRECT_DELAY_MS
+        val readingTime = (feedback?.length ?: 0) * READING_MS_PER_CHAR
+        return maxOf(base, readingTime).coerceAtMost(if (isCorrect) CORRECT_MAX_DELAY_MS else INCORRECT_MAX_DELAY_MS)
     }
 
     // MARK: Navigation within session
@@ -456,6 +475,9 @@ class PracticeViewModel(
         const val RECORD_MAX_MS = 13_500L
         const val CORRECT_DELAY_MS = 1_500L
         const val INCORRECT_DELAY_MS = 2_500L
+        const val CORRECT_MAX_DELAY_MS = 3_000L
+        const val INCORRECT_MAX_DELAY_MS = 7_000L
+        const val READING_MS_PER_CHAR = 35L
         const val AUTO_RECORD_DELAY_MS = 500L
     }
 }

@@ -56,6 +56,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -268,12 +269,18 @@ private fun CategoryRow(selected: FeedbackCategory, onChange: (FeedbackCategory)
 }
 
 @Composable
-private fun MessageField(value: String, onChange: (String) -> Unit, placeholder: String) {
+internal fun MessageField(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    maxChars: Int = FeedbackViewModel.MAX_MESSAGE_CHARS,
+    minHeight: Dp = 160.dp,
+) {
     val c = SonariTheme.colors
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 160.dp)
+            .heightIn(min = minHeight)
             .clip(RoundedCornerShape(12.dp))
             .background(c.surfacePrimary)
             .border(1.dp, c.border, RoundedCornerShape(12.dp))
@@ -281,7 +288,7 @@ private fun MessageField(value: String, onChange: (String) -> Unit, placeholder:
     ) {
         BasicTextField(
             value = value,
-            onValueChange = { onChange(it.take(FeedbackViewModel.MAX_MESSAGE_CHARS)) },
+            onValueChange = { onChange(it.take(maxChars)) },
             modifier = Modifier.fillMaxSize(),
             textStyle = TextStyle(color = c.textPrimary, fontSize = 14.sp),
             cursorBrush = SolidColor(c.accent),
